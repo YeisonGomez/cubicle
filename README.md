@@ -61,13 +61,21 @@ Archivos sin commit de cada repo del agente, con diff.
 
 ### Reportes
 
-Los `*.html` de `docs/reports/` del proyecto, dentro del panel o a pantalla completa. **Nuevo reporte**: describes qué quieres ver y la sesión lo genera. HTML directo en tu repo, personalizable, sin llenar el proyecto de artefactos.
+Los `*.html` de `docs/reports/` del proyecto, dentro del panel o a pantalla completa.
+
+**Nuevo reporte**: describes qué quieres ver y la sesión lo genera.
+
+Es HTML directo en tu repo: lo personalizas como quieras y no llenas el proyecto de artefactos.
 
 ![Reportes](docs/img/reportes.jpg)
 
 ### PRs
 
-Los PRs abiertos de cada repo. **Informe ejecutivo**: Claude revisa el PR por su naturaleza, no por su tamaño, y deja el informe en la terminal y como HTML en Reportes. **Resolver conflictos**: lo hace en un worktree aparte y pregunta antes de hacer push.
+Los PRs abiertos de cada repo.
+
+**Informe ejecutivo**: Claude revisa el PR por su naturaleza, no por su tamaño, y deja el informe en la terminal y como HTML en Reportes.
+
+**Resolver conflictos**: lo hace en un worktree aparte y pregunta antes de hacer push.
 
 ![PRs](docs/img/prs.jpg)
 
@@ -102,15 +110,6 @@ En Ajustes → Personajes. Con **Pokémon**, cada oficina es un tipo (fuego, agu
 ![Oficina Pokémon](docs/img/oficina-pokemon.jpg)
 
 Sprites del proyecto [vscode-pokemon](https://github.com/jakobhoeg/vscode-pokemon) (CC0), cargados en el navegador; no se guardan aquí. Pokémon es propiedad de The Pokémon Company, Nintendo y Game Freak; homenaje para uso personal, sin afiliación.
-
-## Dónde vive cada cosa
-
-| Qué | Dónde |
-|---|---|
-| Código (servidor + webview) | `pixel-agents-src/` (`server/src/office/`, `webview-ui/src/components/`, `hooks/`, `i18n/`) |
-| Scripts | `scripts/`: `proyecto.py` (salas), `proyecto_info.py` (ficha), `capacidades.py`, `nota.py`, `gen_layout.py`, `gen_assets.py`, `pokemon.json`, `prompts/` |
-| Tus datos | `~/.pixel-agents/oficina/` y `~/.pixel-agents/config.json`. Nada tuyo entra al repo |
-| Servicio y registro | `~/Library/LaunchAgents/com.cubicle.office.plist`, `~/.pixel-agents/cubicle.log` |
 
 ## Desarrollo
 
