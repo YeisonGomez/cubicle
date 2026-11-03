@@ -1,7 +1,8 @@
+import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
-import { Button } from './Button.js';
+import { IconButton } from './IconButton.js';
 
 interface ModalProps {
   isOpen: boolean;
@@ -46,9 +47,9 @@ export function Modal({
               (changelog, settings) scrolls under it. */}
           <div className="sticky top-0 z-10 bg-bg flex items-center justify-between py-4 px-10 border-b border-border mb-4">
             <span className="text-accent-bright text-2xl">{title}</span>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              x
-            </Button>
+            <IconButton label="Close" size="lg" onClick={onClose}>
+              <X size={20} />
+            </IconButton>
           </div>
           {children}
         </div>
