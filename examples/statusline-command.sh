@@ -14,7 +14,7 @@ ctx_week=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empt
 usage_file="$HOME/.pixel-agents/usage.json"
 if [ -n "$ctx_day" ] || [ -n "$ctx_week" ]; then
   mkdir -p "$HOME/.pixel-agents" 2>/dev/null
-  echo "$input" | jq -c --arg now "$(date +%s)" '{five_hour: (.rate_limits.five_hour // null), seven_day: (.rate_limits.seven_day // null), model: (.model.display_name // null), updatedAt: ($now | tonumber)}' > "$usage_file.tmp" 2>/dev/null && mv "$usage_file.tmp" "$usage_file"
+  echo "$input" | jq -c --arg now "$(date +%s)" '{five_hour: (.rate_limits.five_hour // null), seven_day: (.rate_limits.seven_day // null), rate_limits: (.rate_limits // null), model: (.model.display_name // null), modelId: (.model.id // null), cost: (.cost // null), context_window: (.context_window // null), version: (.version // null), updatedAt: ($now | tonumber)}' > "$usage_file.tmp" 2>/dev/null && mv "$usage_file.tmp" "$usage_file"
 fi
 
 if [ -n "$model" ]; then

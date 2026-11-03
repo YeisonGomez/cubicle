@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { useT } from '../i18n/index.js';
+import { locale, useT } from '../i18n/index.js';
 import { IconChevronLeft, IconChevronRight } from './icons.js';
 import { fmtTokens, HoursChart, WeekdayChart } from './panel/Charts.js';
 import { Heatmap } from './panel/Heatmap.js';
@@ -28,6 +28,35 @@ interface TokenUsage {
   days: number;
   total: number;
   rooms: RoomUsage[];
+}
+
+interface RateLimit {
+  used_percentage?: number | null;
+  resets_at?: number | null;
+}
+interface AccountUsage {
+  five_hour: RateLimit | null;
+  seven_day: RateLimit | null;
+  rate_limits?: Record<string, RateLimit | null> | null;
+  model?: string | null;
+  modelId?: string | null;
+  cost?: { total_cost_usd?: number; total_duration_ms?: number; total_lines_added?: number; total_lines_removed?: number } | null;
+  context_window?: { used_percentage?: number; context_window_size?: number } | null;
+  version?: string | null;
+  updatedAt: number;
+}
+/** Nombre legible de cada ventana de límite que reporta Claude Code (five_hour, seven_day, seven_day_opus…). */
+function limitLabel(key: string, t: (k: string) => string): string {
+  if (key === 'five_hour') return t('tokens.acc.session');
+  if (key === 'seven_day') return t('tokens.acc.week');
+  const m = /^seven_day_(.+)$/.exec(key);
+  if (m) return `${t('tokens.acc.week')} · ${m[1].charAt(0).toUpperCase() + m[1].slice(1)}`;
+  return key.replace(/_/g, ' ');
+}
+function fmtReset(ts: number | null | undefined): string {
+  if (!ts) return '';
+  const ms = ts > 1e12 ? ts : ts * 1000;
+  return new Date(ms).toLocaleString(locale(), { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 const WINDOWS: Array<{ days: number; key: string }> = [
@@ -58,9 +87,16 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
   const [act, setAct] = useState<{ days: Record<string, number>; hours: number[]; tokDays: Record<string, number>; tokHours: number[] } | null>(null);
   const wheelAt = useRef(0);
   const [slide, setSlide] = useState(0);
+  const [account, setAccount] = useState<AccountUsage | null>(null);
+  useEffect(() => {
+    fetch('./api/usage', { cache: 'no-store' })
+      .then(async (r) => (r.ok ? ((await r.json()) as AccountUsage) : null))
+      .then((u) => u && setAccount(u))
+      .catch(() => undefined);
+  }, []);
   useEffect(() => {
     let alive = true;
-    fetch('./api/stats', { cache: 'no-store' })
+    fetch(`./api/stats?days=${days}`, { cache: 'no-store' })
       .then(async (r) => (r.ok ? ((await r.json()) as { days?: Record<string, { prompts: number }>; hours?: number[]; tokensByDay?: Record<string, { in: number; out: number; cacheW: number; cacheR: number }>; tokensByHour?: number[] }) : null))
       .then((d) => {
         if (!alive || !d?.days || !d.hours) return;
@@ -77,7 +113,7 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [days]);
 
   useEffect(() => {
     let alive = true;
@@ -97,6 +133,13 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
     };
   }, [days]);
 
+  // Días dentro de la ventana elegida (para la gráfica de días de la semana).
+  const inWindow = <T,>(m: Record<string, T>): Record<string, T> => {
+    if (days <= 0) return m;
+    const cut = new Date(Date.now() - (days - 1) * 86_400_000);
+    const key = `${cut.getFullYear()}-${String(cut.getMonth() + 1).padStart(2, '0')}-${String(cut.getDate()).padStart(2, '0')}`;
+    return Object.fromEntries(Object.entries(m).filter(([k]) => k >= key));
+  };
   const toggle = (label: string) =>
     setOpen((s) => {
       const n = new Set(s);
@@ -122,6 +165,48 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
             ))}
           </span>
         </div>
+        {account && (
+          <div className="border-2 border-border px-10 py-8 flex flex-col gap-8">
+            <div className="flex items-center gap-8">
+              <span className="t-sub">{t('tokens.acc.title')}</span>
+              <span className="t-desc">
+                {account.model ? `${t('tokens.acc.model')}: ${account.model}` : ''}
+                {account.version ? ` · Claude Code ${account.version}` : ''}
+              </span>
+              <span className="ml-auto t-desc">{t('tokens.acc.updated', { d: new Date(account.updatedAt * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) })}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-16 gap-y-6">
+              {Object.entries({ five_hour: account.five_hour, seven_day: account.seven_day, ...(account.rate_limits ?? {}) })
+                .filter(([k], i, arr) => arr.findIndex(([x]) => x === k) === i)
+                .map(([k, v]) => {
+                  const used = typeof v?.used_percentage === 'number' ? Math.round(v.used_percentage) : null;
+                  return (
+                    <div key={k} className="flex flex-col gap-3">
+                      <div className="flex items-center gap-8 text-[13px]">
+                        <span className="text-text">{limitLabel(k, t)}</span>
+                        <span className="ml-auto font-semibold" style={{ color: used === null ? 'var(--color-text-muted)' : used >= 90 ? 'var(--color-status-error)' : used >= 70 ? 'var(--color-status-permission)' : 'var(--color-status-success)' }}>
+                          {used === null ? t('tokens.acc.noData') : `${used}% · ${t('tokens.acc.left', { n: 100 - used })}`}
+                        </span>
+                      </div>
+                      <div className="h-6 bg-bg-dark border border-border">
+                        <div className="h-full" style={{ width: `${used ?? 0}%`, background: used === null ? 'transparent' : used >= 90 ? 'var(--color-status-error)' : used >= 70 ? 'var(--color-status-permission)' : 'var(--color-status-success)' }} />
+                      </div>
+                      <div className="t-desc">{v?.resets_at ? t('tokens.acc.resets', { d: fmtReset(v.resets_at) }) : used === null ? t('tokens.acc.noDataWhy') : ''}</div>
+                    </div>
+                  );
+                })}
+            </div>
+            {(account.cost || account.context_window) && (
+              <div className="t-desc flex flex-wrap gap-x-16 gap-y-2">
+                {typeof account.context_window?.used_percentage === 'number' && <span>{t('tokens.acc.context', { p: Math.round(account.context_window.used_percentage) })}</span>}
+                {typeof account.cost?.total_cost_usd === 'number' && <span>{t('tokens.acc.cost', { c: account.cost.total_cost_usd.toFixed(2) })}</span>}
+                {typeof account.cost?.total_duration_ms === 'number' && <span>{t('tokens.acc.duration', { m: Math.round(account.cost.total_duration_ms / 60000) })}</span>}
+                {typeof account.cost?.total_lines_added === 'number' && <span>{t('tokens.acc.lines', { a: account.cost.total_lines_added, r: account.cost.total_lines_removed ?? 0 })}</span>}
+              </div>
+            )}
+            <div className="t-desc">{t('tokens.acc.planNote')}</div>
+          </div>
+        )}
         {act && (
           <div
             className="border-2 border-border px-10 py-8 overflow-hidden"
@@ -149,12 +234,12 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
               </span>
             </div>
             <div className="flex w-full transition-transform duration-300 ease-out" style={{ transform: `translateX(-${slide * 100}%)` }}>
-              <div className="w-full shrink-0 pr-2">
+              <div className="w-full shrink-0 pr-2 overflow-hidden">
                 <Heatmap values={act.days} format={(n) => t('activity.promptsN', { n })} extra={(k) => (act.tokDays[k] ? `${fmtTokens(act.tokDays[k])} tokens` : null)} />
               </div>
-              <div className="w-full shrink-0 pl-2 grid grid-cols-[1fr_220px] gap-16">
+              <div className="w-full shrink-0 pl-2 pt-4 grid grid-cols-[1fr_220px] gap-20 overflow-hidden">
                 <HoursChart hours={act.hours} tokens={act.tokHours} />
-                <WeekdayChart days={act.days} tokensByDay={act.tokDays} />
+                <WeekdayChart days={inWindow(act.days)} tokensByDay={inWindow(act.tokDays)} />
               </div>
             </div>
           </div>

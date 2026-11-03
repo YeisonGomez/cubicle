@@ -6,7 +6,7 @@
 import type { FastifyInstance } from 'fastify';
 import * as fs from 'fs';
 
-import { persistedActivityStats, tokenUsageByDir, totalTokens } from '../activityStats.js';
+import { persistedActivityStats, tokenUsageByDir, totalTokens, windowedHours } from '../activityStats.js';
 import { transcriptLastActivity } from '../agentProjects.js';
 import { capabilitiesFor } from '../capabilities.js';
 import { clearCapabilities } from '../capabilitiesPrompt.js';
@@ -73,9 +73,13 @@ export function registerStatsRoutes(app: FastifyInstance, options: HttpServerOpt
     const dirs = dirsOfRoom(request.params.label);
     reply.send({ ...persistedActivityStats(dirs, activityFile()), agents: dirs.length });
   });
-  app.get('/api/stats', async () => {
+  app.get<{ Querystring: { days?: string } }>('/api/stats', async (request) => {
     const cfg = readConfig();
-    return { ...persistedActivityStats(cfg.directories, activityFile()), agents: cfg.directories.length };
+    const base = { ...persistedActivityStats(cfg.directories, activityFile()), agents: cfg.directories.length };
+    // ?days=N: horas y tokens por hora solo de la ventana (las gráficas de horas/días siguen el filtro).
+    const days = Math.max(0, Math.min(365, Number(request.query.days ?? 0) || 0));
+    if (days > 0) Object.assign(base, windowedHours(cfg.directories.map((d) => d.path), days));
+    return base;
   });
 
   // Capacidades: recursos externos, MCP, apps, skills.

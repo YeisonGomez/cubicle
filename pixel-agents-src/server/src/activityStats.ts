@@ -38,6 +38,9 @@ interface FileStats {
   tokens: Record<string, TokenCounts>;
   tokHours: number[];
   hours: number[];
+  /** Prompts y tokens por hora, por día (YYYY-MM-DD): para las gráficas filtradas por ventana. */
+  dayHours: Record<string, number[]>;
+  dayTokHours: Record<string, number[]>;
   firstAt: number | null;
   lastAt: number | null;
 }
@@ -60,7 +63,7 @@ function scanFile(file: string): FileStats | null {
   }
   const cached = cache.get(file);
   if (cached && cached.size === st.size) return cached;
-  const out: FileStats = { size: st.size, days: {}, tools: {}, mcp: {}, skills: {}, tokens: {}, tokHours: new Array<number>(24).fill(0), hours: new Array<number>(24).fill(0), firstAt: null, lastAt: null };
+  const out: FileStats = { size: st.size, days: {}, tools: {}, mcp: {}, skills: {}, tokens: {}, tokHours: new Array<number>(24).fill(0), hours: new Array<number>(24).fill(0), dayHours: {}, dayTokHours: {}, firstAt: null, lastAt: null };
   const fd = fs.openSync(file, 'r');
   try {
     const CHUNK = 8 * 1024 * 1024;
@@ -91,7 +94,9 @@ function scanFile(file: string): FileStats | null {
         t.out += u.output_tokens ?? 0;
         t.cacheW += u.cache_creation_input_tokens ?? 0;
         t.cacheR += u.cache_read_input_tokens ?? 0;
-        out.tokHours[new Date(ms).getHours()] += (u.input_tokens ?? 0) + (u.output_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+        const tot = (u.input_tokens ?? 0) + (u.output_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+        out.tokHours[new Date(ms).getHours()] += tot;
+        (out.dayTokHours[key] ??= new Array<number>(24).fill(0))[new Date(ms).getHours()] += tot;
       }
       if (rec.isSidechain) return;
       const day = (out.days[key] ??= { prompts: 0, replies: 0, tools: 0 });
@@ -107,6 +112,7 @@ function scanFile(file: string): FileStats | null {
         if (!isHumanPrompt(text)) return;
         day.prompts++;
         out.hours[new Date(ms).getHours()]++;
+        (out.dayHours[key] ??= new Array<number>(24).fill(0))[new Date(ms).getHours()]++;
         if (out.firstAt === null || ms < out.firstAt) out.firstAt = ms;
         if (out.lastAt === null || ms > out.lastAt) out.lastAt = ms;
       } else if (rec.type === 'assistant') {
@@ -445,4 +451,22 @@ export function persistedActivityStats(dirs: Array<{ name: string; path: string 
   const tokensByHour = new Array<number>(24).fill(0);
   for (const m of merged) for (let h = 0; h < 24; h++) tokensByHour[h] += m.tokHours?.[h] ?? 0;
   return { days, sessions, prompts, replies, tools: toolCalls, topTools, hours, firstAt, lastAt, streak, last7, last30, busiestDay: busiest, detected, tokensByDay, tokens, tokensByHour };
+}
+
+
+/** Prompts y tokens por hora dentro de los últimos `days` días (0 = todo), sumando los
+ *  transcripts de las carpetas dadas. Para que las gráficas de horas/días respeten el filtro. */
+export function windowedHours(cwds: string[], days: number): { hours: number[]; tokensByHour: number[] } {
+  const hours = new Array<number>(24).fill(0);
+  const tokensByHour = new Array<number>(24).fill(0);
+  const cutoff = days > 0 ? dayKey(new Date(Date.now() - (days - 1) * 86_400_000)) : '';
+  for (const cwd of cwds) {
+    for (const f of sessionFiles(cwd)) {
+      const s = scanFile(f);
+      if (!s) continue;
+      for (const [k, hs] of Object.entries(s.dayHours)) if (k >= cutoff) for (let h = 0; h < 24; h++) hours[h] += hs[h];
+      for (const [k, hs] of Object.entries(s.dayTokHours)) if (k >= cutoff) for (let h = 0; h < 24; h++) tokensByHour[h] += hs[h];
+    }
+  }
+  return { hours, tokensByHour };
 }
