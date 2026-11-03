@@ -1,0 +1,21 @@
+# dependencias y compilados del fork
+pixel-agents-src/node_modules/
+pixel-agents-src/dist/
+pixel-agents-src/**/*.tsbuildinfo
+pixel-agents-src/webview-ui/node_modules/
+pixel-agents-src/server/node_modules/
+
+# datos del usuario (viven en ~/.pixel-agents/oficina; nunca en el repo)
+oficinas.json
+letreros.json
+capacidades.json
+actividad.json
+layout-*.json
+assets/
+oficina/
+
+# python / sistema
+__pycache__/
+*.pyc
+.DS_Store
+*.log

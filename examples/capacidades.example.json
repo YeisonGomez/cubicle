@@ -1,0 +1,14 @@
+{
+  "Empresa": {
+    "recursos": [
+      { "nombre": "MongoDB prod", "tipo": "base de datos", "detalle": "lectura via mongosh" },
+      { "nombre": "Stripe", "tipo": "api", "detalle": "pagos y suscripciones" },
+      { "nombre": "AWS", "tipo": "nube", "detalle": "lambda, s3" }
+    ],
+    "mcp": ["Sentry", "GitHub"],
+    "apps": ["Chrome", "Docker"],
+    "skills": [{ "nombre": "Health check", "descripcion": "verifica deploy en dev/sandbox/prod" }],
+    "actualizado": 0,
+    "fuente": "sesion"
+  }
+}

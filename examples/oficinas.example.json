@@ -1,0 +1,10 @@
+{
+  "salas": [
+    { "label": "Finanzas", "sign": "SIGN_FINANZAS", "color": "#feca57", "floor": 7, "tileColor": { "h": 35, "s": 30, "b": 15, "c": 0 }, "tema": "finanzas", "fila": 1, "base": "~/Documents/Finanzas" },
+    { "label": "Gym", "sign": "SIGN_GYM", "color": "#54a0ff", "floor": 4, "tileColor": { "h": 205, "s": 40, "b": -8, "c": 0 }, "tema": "gym", "fila": 1, "base": "~/Documents/Gym" },
+    { "label": "Empresa", "sign": "SIGN_EMPRESA", "color": "#1dd1a1", "floor": 3, "tileColor": { "h": 150, "s": 30, "b": -2, "c": 0 }, "tema": "fintech", "fila": 2, "base": "~/code/empresa" },
+    { "label": "Cafe", "sign": "SIGN_CAFE", "color": "#e17055", "floor": 8, "tileColor": { "h": 20, "s": 45, "b": -6, "c": 0 }, "tema": "cafe", "fila": 3, "base": "~/Documents/Cafe" },
+    { "label": "Oficina", "sign": "SIGN_OFICINA", "color": "#ffd166", "floor": 7, "tileColor": { "h": 210, "s": 25, "b": -6, "c": 0 }, "tema": "code", "fila": 3, "base": "~/code/oficina" }
+  ],
+  "filas": { "1": "Vida personal", "2": "Trabajo", "3": "Proyectos personales" }
+}
