@@ -15,13 +15,30 @@
  * index.html sets `referrer: no-referrer` so it never leaves as a Referer.
  * See server/src/wsAuth.ts (standaloneTokenValid).
  */
-export const serverToken: string | null = readServerToken();
+
+/**
+ * Cubicle: el token de la URL se recuerda en localStorage de este origen, así
+ * http://127.0.0.1:3100/ sin ?token= también funciona después de abrirla una vez
+ * con `cubicle open`. Otra página (incluida una que re-enlace DNS a 127.0.0.1)
+ * tiene otro origen y no puede leerlo.
+ */
+const TOKEN_KEY = 'pixel-agents.token';
 
 function readServerToken(): string | null {
   if (typeof window === 'undefined') return null;
+  let fromUrl: string | null = null;
   try {
-    return new URLSearchParams(window.location.search).get('token');
+    fromUrl = new URLSearchParams(window.location.search).get('token');
   } catch {
-    return null;
+    /* URL rara */
   }
+  try {
+    if (fromUrl) localStorage.setItem(TOKEN_KEY, fromUrl);
+    else return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    /* sin almacenamiento */
+  }
+  return fromUrl;
 }
+
+export const serverToken: string | null = readServerToken();

@@ -7,6 +7,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import App from './App.tsx';
+import { initPrefsSync } from './prefsSync.js';
 import { isBrowserRuntime } from './runtime';
 
 async function main() {
@@ -16,6 +17,7 @@ async function main() {
     const { initBrowserMock } = await import('./browserMock.js');
     await initBrowserMock();
   }
+  await initPrefsSync();
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App />

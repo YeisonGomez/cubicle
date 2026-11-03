@@ -12,6 +12,7 @@ import { registerOnboardingRoutes } from './onboardingRoutes.js';
 import { registerPrRoutes } from './prRoutes.js';
 import { registerProjectRoutes } from './projectRoutes.js';
 import { registerRoomsRoutes } from './roomsRoutes.js';
+import { registerPrefsRoutes } from './prefsRoutes.js';
 import { registerSkinRoutes } from './skinRoutes.js';
 import { registerStatsRoutes } from './statsRoutes.js';
 
@@ -29,6 +30,7 @@ export function registerOfficeRoutes(app: FastifyInstance, options: HttpServerOp
   registerProjectRoutes(app, options);
   registerLangRoutes(app, options);
   registerSkinRoutes(app, options);
+  registerPrefsRoutes(app, options);
   // Contexto de Cubicle (carpeta de reportes) en el CLAUDE.md de todos los agentes, poco después de arrancar.
   setTimeout(() => ensureProjectContext(), 20_000).unref();
 }

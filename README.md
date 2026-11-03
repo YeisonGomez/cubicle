@@ -51,6 +51,10 @@ cubicle open
 
 Nunca arranques la oficina desde dentro de una sesión de Claude.
 
+**El token.** La oficina tiene terminales reales, así que pide una llave: la primera vez que arranca genera un token aleatorio y lo guarda en `~/.pixel-agents/standalone-token`. Sin él, cualquier página web que visites podría hablarle a `127.0.0.1:3100` y escribir en tus terminales. No tienes que copiarlo: `cubicle open` abre la URL con el token (y `cubicle status` la imprime). El navegador lo recuerda, así que después basta `http://127.0.0.1:3100/`. Si se filtra, `node pixel-agents-src/dist/cli.js --rotate-token` lo cambia.
+
+Tus preferencias de la barra (fichas fijadas, orden de salas y fichas, salas plegadas, descansos) se guardan en `~/.pixel-agents/oficina/ui-prefs.json`: sobreviven a reinicios, a otro navegador y a abrir `localhost` en vez de `127.0.0.1`.
+
 ## Primer arranque
 
 Claude Code guarda cada conversación en `~/.claude/projects/`. Cubicle lee eso y propone las carpetas donde lo usaste la última semana: una carpeta con sesión que contiene otras con sesión es una **oficina**; ella y sus hijas, sus **agentes**. Marcas las que quieres, eliges idioma y skin, y listo.
