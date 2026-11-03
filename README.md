@@ -35,9 +35,21 @@ cubicle open        # abre la oficina en el navegador
 
 Nunca arranques la oficina desde dentro de una sesión de Claude.
 
-## Primer arranque
+## Primer arranque y cómo detecta tus sesiones
 
-Cubicle detecta las carpetas donde usaste Claude Code la última semana y las propone agrupadas: una carpeta con sesión que contiene otras con sesión es una **oficina**; ella y sus hijas, sus **agentes**. Ajustas nombres, eliges idioma y skin, y listo. Después: **+ Oficina**, **+ Agent** o Settings → Importar sesiones.
+Claude Code guarda cada conversación en `~/.claude/projects/`, una carpeta por directorio de trabajo. Cubicle lee eso.
+
+**Primer arranque.** Propone las carpetas donde usaste Claude Code la última semana, agrupadas: una carpeta con sesión que contiene otras con sesión es una **oficina**; ella y sus hijas, sus **agentes**. Ajustas nombres, marcas las que quieres, eliges idioma y skin, y listo.
+
+**Después.** **+ Oficina** crea una sala para una carpeta (nueva o existente). **+ Agent** abre una sesión más dentro de una oficina. Settings → *Importar sesiones de Claude* repite la detección cuando quieras.
+
+**Qué ves en la oficina.**
+- Cada agente es un personaje. Su terminal la abre Cubicle; al reiniciar, `--relaunch` reanuda la última conversación de cada uno.
+- Una sesión que ya tienes abierta en otra terminal no se duplica: Cubicle la observa y la muestra, pero no abre otra.
+- Settings → *Watch All Sessions* muestra también las sesiones que abras fuera de Cubicle, siempre que estén en una carpeta registrada. Corridas sueltas de scripts o bots no aparecen.
+- Su estado sale de los hooks de Claude Code (trabajando, pide permiso, te necesita, libre). Sin prompts en dos semanas, el personaje se va al sofá.
+
+**Configurar cada agente.** En su panel → Configuración: nombre, repositorios conocidos (para Cambios y PRs), carpetas de reportes y revisión de PRs.
 
 ## Recorrido
 

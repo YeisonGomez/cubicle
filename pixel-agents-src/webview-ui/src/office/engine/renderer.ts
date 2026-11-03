@@ -104,6 +104,22 @@ function skinFrame(url: string): { img: HTMLCanvasElement; w: number; h: number 
   while (i < a.ends.length - 1 && t >= a.ends[i]) i++;
   return { img: a.frames[i], w: a.w, h: a.h };
 }
+// Silueta blanca de un frame de skin (contorno de selección/hover), cacheada por frame.
+const skinSilhouettes = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
+function skinSilhouette(img: HTMLCanvasElement): HTMLCanvasElement {
+  let s = skinSilhouettes.get(img);
+  if (s) return s;
+  s = document.createElement('canvas');
+  s.width = img.width;
+  s.height = img.height;
+  const c = s.getContext('2d')!;
+  c.drawImage(img, 0, 0);
+  c.globalCompositeOperation = 'source-in';
+  c.fillStyle = '#ffffff';
+  c.fillRect(0, 0, s.width, s.height);
+  skinSilhouettes.set(img, s);
+  return s;
+}
 /** El GIF (32 px) se dibuja a tamaño natural en píxeles de mundo (2 tiles): el Pokémon queda algo más bajo que el muñeco. */
 const SKIN_SCALE = 1;
 import { mapOffset } from '../projection.js';
@@ -486,7 +502,8 @@ export function renderScene(
     // White outline: full opacity for selected, 50% for hover
     const isSelected = selectedAgentId !== null && ch.id === selectedAgentId;
     const isHovered = hoveredAgentId !== null && ch.id === hoveredAgentId;
-    if (isSelected || isHovered) {
+    const skinFr = ch.skin ? skinFrame(ch.state === CharacterState.WALK ? ch.skin.walk : ch.skin.url) : null;
+    if ((isSelected || isHovered) && !skinFr) {
       const outlineAlpha = isSelected ? SELECTED_OUTLINE_ALPHA : HOVERED_OUTLINE_ALPHA;
       const outlineData = getOutlineSprite(spriteData);
       const outlineCached = getCachedSprite(outlineData, zoom);
@@ -503,15 +520,36 @@ export function renderScene(
       });
     }
 
-    const skinFr = ch.skin ? skinFrame(ch.state === CharacterState.WALK ? ch.skin.walk : ch.skin.url) : null;
     if (skinFr) {
       // Sprite Pokémon animado: escala entera (nítido), anclado abajo al centro del personaje.
       const w = skinFr.w * SKIN_SCALE * zoom;
       const h = skinFr.h * SKIN_SCALE * zoom;
       const x = Math.round(offsetX + ch.x * zoom - w / 2);
-      const y = Math.round(offsetY + (ch.y + sittingOffset) * zoom - h);
+      const y = Math.round(offsetY + (ch.y + sittingOffset - hop) * zoom - h);
       const flip = ch.dir === Direction.LEFT;
       const img = skinFr.img;
+      if (isSelected || isHovered) {
+        // Contorno del Pokémon (no del muñeco): silueta blanca desplazada 1 px de sprite en 4 direcciones.
+        const sil = skinSilhouette(img);
+        const d = Math.max(1, Math.round(SKIN_SCALE * zoom));
+        const outlineAlpha = isSelected ? SELECTED_OUTLINE_ALPHA : HOVERED_OUTLINE_ALPHA;
+        drawables.push({
+          zY: charZY - OUTLINE_Z_SORT_OFFSET,
+          draw: (c) => {
+            c.save();
+            c.imageSmoothingEnabled = false;
+            c.globalAlpha = outlineAlpha;
+            if (flip) {
+              c.translate(x + w, y);
+              c.scale(-1, 1);
+              for (const [dx, dy] of [[-d, 0], [d, 0], [0, -d], [0, d]]) c.drawImage(sil, dx, dy, w, h);
+            } else {
+              for (const [dx, dy] of [[-d, 0], [d, 0], [0, -d], [0, d]]) c.drawImage(sil, x + dx, y + dy, w, h);
+            }
+            c.restore();
+          },
+        });
+      }
       drawables.push({
         zY: charZY,
         draw: (c) => {

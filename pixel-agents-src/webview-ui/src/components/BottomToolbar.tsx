@@ -76,7 +76,7 @@ export function BottomToolbar({
   return (
     // Bottom-left. The terminal panel docks on the right edge, so it never
     // reaches these buttons and no lift is needed.
-    <div className="absolute left-10 bottom-10 z-20 flex items-center gap-4 pixel-panel p-4">
+    <div className="absolute left-10 bottom-10 z-50 flex items-center gap-4 pixel-panel p-4">
       {showUnavailable && (
         <Button
           variant="disabled"
