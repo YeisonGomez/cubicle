@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import type { HttpServerOptions } from '../httpServer.js';
-import { scriptsDir } from '../officePaths.js';
+import { pythonBin, scriptsDir } from '../officePaths.js';
 import { claudeProvider } from '../providers/index.js';
 import type { LaunchStandaloneAgentDeps } from '../terminal/standaloneAgentLauncher.js';
 import { bearerTokenValid } from '../wsAuth.js';
@@ -37,7 +37,7 @@ export function runProyecto(options: HttpServerOptions, args: string[]): Promise
   return new Promise((resolve) => {
     const cli = path.join(scriptsDir(), 'proyecto.py');
     const env = { ...process.env, OFICINA_URL: `http://127.0.0.1:${listeningPort || options.port || 3100}` };
-    execFile('python3', [cli, ...args], { env, timeout: 120_000 }, (err, stdout, stderr) => {
+    execFile(pythonBin(), [cli, ...args], { env, timeout: 120_000 }, (err, stdout, stderr) => {
       resolve({ ok: !err, log: `${stdout}${stderr}${err ? `\n${err.message}` : ''}` });
     });
   });

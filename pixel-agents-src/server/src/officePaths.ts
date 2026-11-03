@@ -12,6 +12,10 @@ import * as path from 'path';
 export function scriptsDir(): string {
   return path.resolve(path.dirname(process.argv[1] ?? ''), '..', '..', 'scripts');
 }
+/** Intérprete de Python para los scripts: `python3` (macOS/Linux) o `python` (Windows); `OFICINA_PYTHON` lo fuerza. */
+export function pythonBin(): string {
+  return process.env.OFICINA_PYTHON ?? (process.platform === 'win32' ? 'python' : 'python3');
+}
 export function officeDir(): string {
   return process.env.OFICINA_DIR ?? path.join(os.homedir(), '.pixel-agents', 'oficina');
 }

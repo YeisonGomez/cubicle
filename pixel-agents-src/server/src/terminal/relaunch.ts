@@ -67,13 +67,32 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  *  Es la prueba real de "conversación abierta en otra terminal"; el mtime del transcript
  *  no sirve, porque justo tras reiniciar la oficina todos los transcripts son recientes. */
 function liveClaudeProcesses(ownPids: Set<number>): Array<{ pid: number; argv: string; cwd: string | null }> {
+  const procs: Array<{ pid: number; argv: string; cwd: string | null }> = [];
+  if (process.platform === 'win32') {
+    // Windows: lista de procesos por PowerShell (sin cwd: solo se reconoce por --resume <id>).
+    try {
+      const out = execFileSync(
+        'powershell',
+        ['-NoProfile', '-Command', "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*claude*' } | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"],
+        { encoding: 'utf8', timeout: 8000 },
+      );
+      const parsed = out.trim() ? (JSON.parse(out) as { ProcessId: number; CommandLine: string | null } | Array<{ ProcessId: number; CommandLine: string | null }>) : [];
+      for (const p of Array.isArray(parsed) ? parsed : [parsed]) {
+        const argv = p.CommandLine ?? '';
+        if (!/claude(\.exe|\.cmd|")?\s/.test(argv + ' ') || /chrome-native-host/.test(argv) || ownPids.has(p.ProcessId)) continue;
+        procs.push({ pid: p.ProcessId, argv, cwd: null });
+      }
+    } catch {
+      /* sin PowerShell: no se puede saber */
+    }
+    return procs;
+  }
   let ps: string;
   try {
     ps = execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8', timeout: 5000 });
   } catch {
     return [];
   }
-  const procs: Array<{ pid: number; argv: string; cwd: string | null }> = [];
   for (const line of ps.split('\n')) {
     const m = /^\s*(\d+)\s+(.*)$/.exec(line);
     if (!m) continue;
@@ -94,7 +113,14 @@ function liveClaudeProcesses(ownPids: Set<number>): Array<{ pid: number; argv: s
       }
     }
   } catch {
-    /* sin lsof: solo se podrá reconocer por --resume <id> */
+    // Sin lsof (Linux): el cwd está en /proc/<pid>/cwd.
+    for (const p of procs) {
+      try {
+        p.cwd = fs.readlinkSync(`/proc/${p.pid}/cwd`);
+      } catch {
+        /* solo se podrá reconocer por --resume <id> */
+      }
+    }
   }
   return procs;
 }

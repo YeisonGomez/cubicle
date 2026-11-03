@@ -1,6 +1,6 @@
-#!/bin/zsh
-# Cubicle en segundo plano, sin terminal abierta.
-#   cubicle install    registra la oficina para que arranque sola al iniciar sesión (macOS: launchd)
+#!/usr/bin/env bash
+# Cubicle en segundo plano, sin terminal abierta. macOS (launchd) y Linux (systemd --user).
+#   cubicle install    arranque automático al iniciar sesión (macOS: launchd · Linux: systemd --user)
 #   cubicle start      arranca (en segundo plano si está instalada; si no, en esta terminal)
 #   cubicle stop       para la oficina (y sus terminales; --relaunch las reanuda al volver)
 #   cubicle restart    reinicia (tras compilar cambios de servidor)
@@ -8,27 +8,38 @@
 #   cubicle logs       sigue el registro (~/.pixel-agents/cubicle.log)
 #   cubicle open       abre la oficina en el navegador
 #   cubicle uninstall  quita el arranque automático
+# En Windows usa cubicle.ps1 (o esta misma ruta dentro de WSL).
 set -e
-# ${0:A}: ruta real del script aunque se invoque por el enlace de /opt/homebrew/bin
-DIR="$(cd "$(dirname "${0:A}")" && pwd)"
+# Ruta real del script aunque se invoque por un enlace (p. ej. /opt/homebrew/bin/cubicle o ~/.local/bin).
+SRC="${BASH_SOURCE[0]}"
+while [ -L "$SRC" ]; do T="$(readlink "$SRC")"; case "$T" in /*) SRC="$T";; *) SRC="$(dirname "$SRC")/$T";; esac; done
+DIR="$(cd "$(dirname "$SRC")" && pwd)"
 PORT="${OFICINA_PORT:-3100}"
 EXTRA="${OFICINA_ARGS:-}"   # argumentos extra para el servidor (p. ej. --no-terminal en pruebas)
 LABEL="com.cubicle.office"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+UNIT_DIR="$HOME/.config/systemd/user"
+UNIT="$UNIT_DIR/cubicle.service"
 LOG="$HOME/.pixel-agents/cubicle.log"
 PIDFILE="$HOME/.pixel-agents/cubicle.pid"
-[ -s ~/.nvm/nvm.sh ] && source ~/.nvm/nvm.sh && nvm use 24 >/dev/null 2>&1 || true
+[ -s "$HOME/.nvm/nvm.sh" ] && { . "$HOME/.nvm/nvm.sh" && nvm use 24 >/dev/null 2>&1 || true; }
 NODE="$(command -v node || true)"
 [ -n "$NODE" ] || { echo "Falta Node.js (20+)."; exit 1; }
-mkdir -p ~/.pixel-agents
+mkdir -p "$HOME/.pixel-agents"
 
-url() { local t; t="$(cat ~/.pixel-agents/standalone-token 2>/dev/null || true)"; echo "http://127.0.0.1:$PORT/${t:+?token=$t}"; }
-running() { curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$PORT/" ; }
-is_mac() { [ "$(uname)" = "Darwin" ]; }
+OS="$(uname -s)"
+is_mac() { [ "$OS" = "Darwin" ]; }
+is_linux() { [ "$OS" = "Linux" ] && command -v systemctl >/dev/null 2>&1; }
+url() { local t; t="$(cat "$HOME/.pixel-agents/standalone-token" 2>/dev/null || true)"; echo "http://127.0.0.1:$PORT/${t:+?token=$t}"; }
+running() { curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$PORT/"; }
 pids() { pgrep -f "dist/cli.js --port $PORT" || true; }
+stop_foreground() { local p; p="$(pids)"; [ -z "$p" ] || { echo "$p" | xargs kill 2>/dev/null || true; sleep 1; }; rm -f "$PIDFILE"; }
+installed() { { is_mac && [ -f "$PLIST" ]; } || { is_linux && [ -f "$UNIT" ]; }; }
 
 write_plist() {
   mkdir -p "$(dirname "$PLIST")"
+  local extra=""; for a in $EXTRA; do extra="$extra    <string>$a</string>
+"; done
   cat > "$PLIST" <<PL
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -37,8 +48,7 @@ write_plist() {
   <key>ProgramArguments</key><array>
     <string>$NODE</string><string>$DIR/pixel-agents-src/dist/cli.js</string>
     <string>--port</string><string>$PORT</string><string>--relaunch</string>
-$(for a in ${=EXTRA}; do echo "    <string>$a</string>"; done)
-  </array>
+$extra  </array>
   <key>WorkingDirectory</key><string>$DIR</string>
   <key>EnvironmentVariables</key><dict>
     <key>PATH</key><string>$PATH</string>
@@ -52,38 +62,69 @@ $(for a in ${=EXTRA}; do echo "    <string>$a</string>"; done)
 </dict></plist>
 PL
 }
-stop_foreground() { local p; p="$(pids)"; [ -z "$p" ] || { echo "$p" | xargs kill 2>/dev/null || true; sleep 1; }; rm -f "$PIDFILE"; }
-installed() { is_mac && [ -f "$PLIST" ]; }
+write_unit() {
+  mkdir -p "$UNIT_DIR"
+  cat > "$UNIT" <<UN
+[Unit]
+Description=Cubicle (oficina pixel-art para Claude Code)
+After=network.target
+
+[Service]
+ExecStart=$NODE $DIR/pixel-agents-src/dist/cli.js --port $PORT --relaunch $EXTRA
+WorkingDirectory=$DIR
+Environment=PATH=$PATH
+Environment=HOME=$HOME
+Environment=LANG=${LANG:-en_US.UTF-8}
+Restart=on-failure
+RestartSec=3
+StandardOutput=append:$LOG
+StandardError=append:$LOG
+
+[Install]
+WantedBy=default.target
+UN
+}
+start_bg() {
+  if is_mac; then launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null || launchctl kickstart "gui/$(id -u)/$LABEL"
+  else systemctl --user daemon-reload; systemctl --user start cubicle.service; fi
+}
+stop_bg() {
+  if is_mac; then launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+  else systemctl --user stop cubicle.service 2>/dev/null || true; fi
+}
 
 case "${1:-}" in
   install)
-    is_mac || { echo "El arranque automático solo está hecho para macOS; en Linux usa 'cubicle start' (segundo plano con nohup)."; exit 1; }
-    stop_foreground
-    write_plist
-    launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-    launchctl bootstrap "gui/$(id -u)" "$PLIST"
+    if is_mac; then stop_foreground; write_plist; stop_bg; launchctl bootstrap "gui/$(id -u)" "$PLIST"
+    elif is_linux; then stop_foreground; write_unit; systemctl --user daemon-reload; systemctl --user enable --now cubicle.service
+      loginctl enable-linger "$USER" 2>/dev/null || echo "(opcional) 'loginctl enable-linger $USER' para que arranque también sin sesión gráfica."
+    else echo "Arranque automático solo en macOS (launchd) y Linux (systemd). Aquí usa 'cubicle start'."; exit 1; fi
     echo "Instalado: la oficina arranca sola al iniciar sesión y se reinicia si se cae."
     sleep 3; echo "URL: $(url)";;
   uninstall)
     installed || { echo "No estaba instalado."; exit 0; }
-    launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true; rm -f "$PLIST"; echo "Quitado el arranque automático.";;
+    if is_mac; then stop_bg; rm -f "$PLIST"; else systemctl --user disable --now cubicle.service 2>/dev/null || true; rm -f "$UNIT"; systemctl --user daemon-reload; fi
+    echo "Quitado el arranque automático.";;
   start)
     if running; then echo "Ya está corriendo: $(url)"; exit 0; fi
-    if installed; then launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null || launchctl kickstart "gui/$(id -u)/$LABEL"
-    elif is_mac; then echo "Sin arranque automático (corre 'cubicle install' una vez). Arrancando en esta terminal…"; cd "$DIR"; exec "$NODE" pixel-agents-src/dist/cli.js --port "$PORT" --relaunch ${=EXTRA}
-    else cd "$DIR"; nohup "$NODE" pixel-agents-src/dist/cli.js --port "$PORT" --relaunch ${=EXTRA} >> "$LOG" 2>&1 & echo $! > "$PIDFILE"; fi
+    if installed; then start_bg
+    elif is_mac || is_linux; then echo "Sin arranque automático (corre 'cubicle install' una vez). Arrancando en esta terminal…"; cd "$DIR"; exec "$NODE" pixel-agents-src/dist/cli.js --port "$PORT" --relaunch $EXTRA
+    else cd "$DIR"; nohup "$NODE" pixel-agents-src/dist/cli.js --port "$PORT" --relaunch $EXTRA >> "$LOG" 2>&1 & echo $! > "$PIDFILE"; fi
     sleep 3; echo "URL: $(url)";;
   stop)
-    if installed; then launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true; fi
+    if installed; then stop_bg; fi
     stop_foreground; echo "Parada.";;
   restart)
-    if installed; then launchctl kickstart -k "gui/$(id -u)/$LABEL" 2>/dev/null || { launchctl bootstrap "gui/$(id -u)" "$PLIST"; }
+    if installed; then
+      if is_mac; then launchctl kickstart -k "gui/$(id -u)/$LABEL" 2>/dev/null || launchctl bootstrap "gui/$(id -u)" "$PLIST"
+      else systemctl --user restart cubicle.service; fi
     else stop_foreground; exec "$0" start; fi
     sleep 3; echo "Reiniciada: $(url)";;
   status)
     if running; then echo "Corriendo en $(url)"; else echo "Parada."; fi
-    installed && echo "Arranque automático: instalado ($PLIST)" || echo "Arranque automático: no instalado (cubicle install)";;
+    if installed; then echo "Arranque automático: instalado ($( is_mac && echo "$PLIST" || echo "$UNIT" ))"; else echo "Arranque automático: no instalado (cubicle install)"; fi;;
   logs) touch "$LOG"; tail -n 50 -f "$LOG";;
-  open) running || { echo "No está corriendo (cubicle start)."; exit 1; }; is_mac && open "$(url)" || xdg-open "$(url)";;
+  open) running || { echo "No está corriendo (cubicle start)."; exit 1; }
+    if is_mac; then open "$(url)"; elif command -v xdg-open >/dev/null; then xdg-open "$(url)"; else echo "$(url)"; fi;;
   *) sed -n 2,11p "$0";;
 esac

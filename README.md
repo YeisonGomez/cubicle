@@ -18,19 +18,33 @@ Fork de [Pixel Agents](https://github.com/pixel-agents-hq/pixel-agents) de Pablo
 
 ## Instalación
 
-Requisitos: macOS (Linux sin arranque automático), [Claude Code](https://docs.anthropic.com/claude-code) ya usado, Node 20+ y Python 3.
+Requisitos: [Claude Code](https://docs.anthropic.com/claude-code) ya usado al menos una vez, Git, Node.js 20+ y Python 3.
+
+**macOS y Linux**
 
 ```bash
 git clone https://github.com/YeisonGomez/cubicle.git cubicle
 cd cubicle
 ./install.sh        # dependencias, compilación, statusline y el comando `cubicle`
-cubicle install     # queda en segundo plano y arranca sola al iniciar sesión (macOS)
+cubicle install     # queda en segundo plano y arranca sola al iniciar sesión
 cubicle open        # abre la oficina en el navegador
+```
+
+En Linux el arranque automático usa `systemd --user`; la statusline necesita `jq` (`sudo apt install jq`).
+
+**Windows** (PowerShell; o usa los pasos de Linux dentro de WSL)
+
+```powershell
+git clone https://github.com/YeisonGomez/cubicle.git cubicle
+cd cubicle
+.\install.ps1        # dependencias, compilación, statusline y el comando `cubicle`
+cubicle install      # tarea programada: arranca sola al iniciar sesión
+cubicle open
 ```
 
 | Comando | Qué hace |
 |---|---|
-| `cubicle install` / `uninstall` | Registra o quita el arranque automático (launchd). Sin terminal abierta; se reinicia sola si se cae |
+| `cubicle install` / `uninstall` | Registra o quita el arranque automático (launchd · systemd · Tarea programada). Sin terminal abierta; se reinicia sola si se cae |
 | `cubicle open` | Abre `http://127.0.0.1:3100/?token=…` |
 | `cubicle restart` | Reinicia y reanuda tus sesiones. Para actualizar: `git pull && ./cubicle-build.sh && cubicle restart` |
 | `cubicle status` · `stop` · `start` · `logs` | Lo que dicen. Sin `install`, `start` corre en la terminal actual |

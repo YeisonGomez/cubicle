@@ -12,7 +12,7 @@ import { promisify } from 'util';
 import { agentInfo, readBranch } from '../agentProjects.js';
 import { readConfig } from '../configPersistence.js';
 import type { HttpServerOptions } from '../httpServer.js';
-import { officeDir, scriptsDir } from '../officePaths.js';
+import { officeDir, pythonBin, scriptsDir } from '../officePaths.js';
 import { langEnv } from './language.js';
 import { bearerAuth, writePromptToAgent, launchDeps } from './shared.js';
 
@@ -144,7 +144,7 @@ export function registerProjectRoutes(app: FastifyInstance, options: HttpServerO
     const cli = path.join(scriptsDir(), 'proyecto_info.py');
     let text: string;
     try {
-      text = execFileSync('python3', [cli, 'pregunta', label, ...subs], {
+      text = execFileSync(pythonBin(), [cli, 'pregunta', label, ...subs], {
         encoding: 'utf8',
         timeout: 5000,
         env: { ...langEnv(), OFICINA_BASE: root, OFICINA_AGENTES: agents.map((a) => a.name).join('|') },
