@@ -263,6 +263,8 @@ export const en: Record<string, string> = {
 
   'usage.session': 'Session',
   'usage.planTitle': 'Plan: {p}',
+  'usage.others': 'others',
+  'usage.weekSplitTitle': 'Week: {pct}% of your weekly limit used (one limit for all models){reset}.\nOf what you used: Fable {fs}% (≈{f} points) · other models {os}% (≈{o} points), by output tokens over the last 7 days.',
   'usage.week': 'Week',
   'usage.meterTitle': '{label}: {pct}% used{reset}',
   'usage.resets': ' · resets {t}',
@@ -283,7 +285,7 @@ export const en: Record<string, string> = {
   'tokens.acc.left': '{n}% left',
   'tokens.acc.resets': 'resets {d}',
   'tokens.acc.otherModels': 'Other models',
-  'tokens.acc.byModel': 'Week by model',
+  'tokens.acc.byModel': 'Of what you used this week, by model (not separate limits)',
   'tokens.acc.byModelHelp': 'Share of output tokens in the last 7 days, from all your Claude Code transcripts. Claude Code does not report a per-model limit, so this is the real split, not the % of a limit.',
   'tokens.acc.modelLine': '{o} output · {r} replies',
   'tokens.acc.context': 'Context {p}%',

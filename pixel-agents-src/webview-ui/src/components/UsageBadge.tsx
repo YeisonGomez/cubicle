@@ -28,18 +28,38 @@ function fmtReset(ts?: number, withDay = false): string {
     : d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 }
 
-function Meter({ label, pct, reset }: { label: string; pct: number; reset: string }) {
+/** Reparto del uso por modelo (tokens de salida de la semana): partes de la barra, no límites aparte. */
+interface Split { fable: number; other: number }
+const FABLE_COLOR = '#8b7bff';
+
+function Meter({ label, pct, reset, split }: { label: string; pct: number; reset: string; split?: Split | null }) {
   const { t } = useT();
   const c = colorFor(pct);
+  const resetTxt = reset ? t('usage.resets', { t: reset }) : '';
+  const title = split
+    ? t('usage.weekSplitTitle', { pct, f: Math.round((pct * split.fable) / 100), o: Math.round((pct * split.other) / 100), fs: Math.round(split.fable), os: Math.round(split.other), reset: resetTxt })
+    : t('usage.meterTitle', { label, pct, reset: resetTxt });
   return (
-    <div className="flex items-center gap-6" title={t('usage.meterTitle', { label, pct, reset: reset ? t('usage.resets', { t: reset }) : '' })}>
+    <div className="flex items-center gap-6" title={title}>
       <span className="text-text-muted text-[11px] uppercase tracking-wide">{label}</span>
-      <span className="relative inline-block w-[64px] h-[8px] bg-bg border border-border">
-        <span className="absolute inset-y-0 left-0" style={{ width: `${Math.min(100, pct)}%`, background: c }} />
+      <span className="relative inline-flex w-[80px] h-[8px] bg-bg border border-border overflow-hidden">
+        {split ? (
+          <>
+            <span className="h-full" style={{ width: `${(Math.min(100, pct) * split.fable) / 100}%`, background: FABLE_COLOR }} />
+            <span className="h-full" style={{ width: `${(Math.min(100, pct) * split.other) / 100}%`, background: c }} />
+          </>
+        ) : (
+          <span className="absolute inset-y-0 left-0" style={{ width: `${Math.min(100, pct)}%`, background: c }} />
+        )}
       </span>
       <span className="text-[12px] font-semibold" style={{ color: c }}>
         {pct}%
       </span>
+      {split && (
+        <span className="text-[11px] text-text-muted">
+          <span style={{ color: FABLE_COLOR }}>Fable {Math.round(split.fable)}%</span> · {t('usage.others')} {Math.round(split.other)}%
+        </span>
+      )}
       {reset && <span className="text-text-muted text-[11px]">↻ {reset}</span>}
     </div>
   );
@@ -52,6 +72,31 @@ export function UsageBadge({ working }: { working: number }) {
   const { t } = useT();
   const [usage, setUsage] = useState<Usage | null>(null);
   const [showTokens, setShowTokens] = useState(false);
+  const [split, setSplit] = useState<Split | null>(null);
+  // Reparto Fable / otros modelos de la semana (el servidor lo cachea 5 min).
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      fetch('./api/usage/models?days=7', { cache: 'no-store' })
+        .then(async (r) => (r.ok ? ((await r.json()) as { models: Array<{ model: string; output: number }> }) : null))
+        .then((d) => {
+          if (!alive || !d) return;
+          let f = 0;
+          let o = 0;
+          for (const m of d.models) {
+            if (/^claude-fable/.test(m.model)) f += m.output;
+            else o += m.output;
+          }
+          setSplit(f + o > 0 ? { fable: (f / (f + o)) * 100, other: (o / (f + o)) * 100 } : null);
+        })
+        .catch(() => undefined);
+    void load();
+    const id = window.setInterval(() => void load(), 300_000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, []);
   useEffect(() => {
     let alive = true;
     const load = () =>
@@ -80,7 +125,7 @@ export function UsageBadge({ working }: { working: number }) {
             {usage.plan.name}
           </span>
         )}
-        {typeof week === 'number' && <Meter label={t('usage.week')} pct={Math.round(week)} reset={fmtReset(usage?.seven_day?.resets_at, true)} />}
+        {typeof week === 'number' && <Meter label={t('usage.week')} pct={Math.round(week)} reset={fmtReset(usage?.seven_day?.resets_at, true)} split={split} />}
         {/* Ventanas por modelo (seven_day_<modelo>) si Claude Code llega a enviarlas; hoy solo envía la semanal total. */}
         {Object.entries(usage?.rate_limits ?? {})
           .filter(([k, v]) => /^seven_day_./.test(k) && typeof v?.used_percentage === 'number')

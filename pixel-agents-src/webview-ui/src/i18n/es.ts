@@ -276,6 +276,8 @@ export const es: Record<string, string> = {
   // ── Uso de la cuenta ──
   'usage.session': 'Sesión',
   'usage.planTitle': 'Plan: {p}',
+  'usage.others': 'otros',
+  'usage.weekSplitTitle': 'Semana: {pct}% de tu límite semanal usado (un solo límite para todos los modelos){reset}.\nDe lo usado: Fable {fs}% (≈{f} puntos) · otros modelos {os}% (≈{o} puntos), por tokens de salida de los últimos 7 días.',
   'usage.week': 'Semana',
   'usage.meterTitle': '{label}: {pct}% usado{reset}',
   'usage.resets': ' · se reinicia {t}',
@@ -297,7 +299,7 @@ export const es: Record<string, string> = {
   'tokens.acc.left': 'queda {n}%',
   'tokens.acc.resets': 'se reinicia {d}',
   'tokens.acc.otherModels': 'Otros modelos',
-  'tokens.acc.byModel': 'Semana por modelo',
+  'tokens.acc.byModel': 'De lo usado esta semana, por modelo (no son límites aparte)',
   'tokens.acc.byModelHelp': 'Proporción de tokens de salida en los últimos 7 días, de todos tus transcripts de Claude Code. Claude Code no envía el límite por modelo, así que es el reparto real, no el % de un límite.',
   'tokens.acc.modelLine': '{o} de salida · {r} respuestas',
   'tokens.acc.context': 'Contexto {p}%',
