@@ -278,7 +278,7 @@ export const en: Record<string, string> = {
   'tokens.acc.noDataWhy': 'Claude Code did not report this window (depends on plan and moment).',
   'tokens.acc.left': '{n}% left',
   'tokens.acc.resets': 'resets {d}',
-  'tokens.acc.context': 'Context of the last session: {p}% used',
+  'tokens.acc.context': 'Context {p}%',
   'tokens.acc.cost': 'Last session: ${c} at API prices',
   'tokens.acc.duration': '{m} min of session',
   'tokens.acc.lines': '+{a} / −{r} lines',

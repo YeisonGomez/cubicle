@@ -292,7 +292,7 @@ export const es: Record<string, string> = {
   'tokens.acc.noDataWhy': 'Claude Code no entregó esta ventana (depende del plan y del momento).',
   'tokens.acc.left': 'queda {n}%',
   'tokens.acc.resets': 'se reinicia {d}',
-  'tokens.acc.context': 'Contexto de la última sesión: {p}% usado',
+  'tokens.acc.context': 'Contexto {p}%',
   'tokens.acc.cost': 'Última sesión: ${c} a precio de API',
   'tokens.acc.duration': '{m} min de sesión',
   'tokens.acc.lines': '+{a} / −{r} líneas',

@@ -60,7 +60,9 @@ export function buildGrid(values: Record<string, number>, weeks: number): HeatGr
   cols.forEach((col, i) => {
     const m = new Date(`${col[0].key}T12:00:00`).getMonth();
     if (m !== lastM) {
-      months.push({ idx: i, label: new Date(`${col[0].key}T12:00:00`).toLocaleDateString(locale(), { month: 'short' }) });
+      // Un mes que empieza a menos de 3 columnas del anterior (o del final) no cabe: se omite.
+      const prev = months[months.length - 1];
+      if ((!prev || i - prev.idx >= 3) && cols.length - i >= 3) months.push({ idx: i, label: new Date(`${col[0].key}T12:00:00`).toLocaleDateString(locale(), { month: 'short' }) });
       lastM = m;
     }
   });

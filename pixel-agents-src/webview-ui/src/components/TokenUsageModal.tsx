@@ -1,9 +1,10 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { locale, useT } from '../i18n/index.js';
-import { IconChevronLeft, IconChevronRight } from './icons.js';
 import { fmtTokens, HoursChart, WeekdayChart } from './panel/Charts.js';
 import { Heatmap } from './panel/Heatmap.js';
+import { IconButton } from './ui/IconButton.js';
 import { Modal } from './ui/Modal.js';
 
 interface AgentUsage {
@@ -157,7 +158,7 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
             {WINDOWS.map((w) => (
               <button
                 key={w.days}
-                className={`px-8 py-3 border-2 text-[12px] ${days === w.days ? 'border-accent text-text' : 'border-border text-text-muted hover:text-text'}`}
+                className={`px-8 py-3 text-[12px] ${days === w.days ? 'bg-active-bg text-text' : 'text-text-muted hover:text-text hover:bg-btn-hover'}`}
                 onClick={() => setDays(w.days)}
               >
                 {t(w.key)}
@@ -168,43 +169,40 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
         {account && (
           <div className="border-2 border-border px-10 py-8 flex flex-col gap-8">
             <div className="flex items-center gap-8">
-              <span className="t-sub">{t('tokens.acc.title')}</span>
-              <span className="t-desc">
-                {account.model ? `${t('tokens.acc.model')}: ${account.model}` : ''}
-                {account.version ? ` · Claude Code ${account.version}` : ''}
-              </span>
-              <span className="ml-auto t-desc">{t('tokens.acc.updated', { d: new Date(account.updatedAt * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) })}</span>
+              <span className="t-sub" title={t('tokens.acc.planNote')}>{t('tokens.acc.title')}</span>
+              <span className="t-desc">{account.model ?? ''}</span>
+              <span className="ml-auto t-desc">{new Date(account.updatedAt * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
             <div className="grid grid-cols-2 gap-x-16 gap-y-6">
               {Object.entries({ five_hour: account.five_hour, seven_day: account.seven_day, ...(account.rate_limits ?? {}) })
                 .filter(([k], i, arr) => arr.findIndex(([x]) => x === k) === i)
                 .map(([k, v]) => {
                   const used = typeof v?.used_percentage === 'number' ? Math.round(v.used_percentage) : null;
+                  const color = used === null ? 'var(--color-text-muted)' : used >= 90 ? 'var(--color-status-error)' : used >= 70 ? 'var(--color-status-permission)' : 'var(--color-status-success)';
                   return (
-                    <div key={k} className="flex flex-col gap-3">
+                    <div key={k} className="flex flex-col gap-3" title={used === null ? t('tokens.acc.noDataWhy') : ''}>
                       <div className="flex items-center gap-8 text-[13px]">
                         <span className="text-text">{limitLabel(k, t)}</span>
-                        <span className="ml-auto font-semibold" style={{ color: used === null ? 'var(--color-text-muted)' : used >= 90 ? 'var(--color-status-error)' : used >= 70 ? 'var(--color-status-permission)' : 'var(--color-status-success)' }}>
-                          {used === null ? t('tokens.acc.noData') : `${used}% · ${t('tokens.acc.left', { n: 100 - used })}`}
+                        <span className="t-desc truncate">{v?.resets_at ? fmtReset(v.resets_at) : ''}</span>
+                        <span className="ml-auto font-semibold" style={{ color }}>
+                          {used === null ? t('tokens.acc.noData') : `${used}%`}
                         </span>
                       </div>
-                      <div className="h-6 bg-bg-dark border border-border">
-                        <div className="h-full" style={{ width: `${used ?? 0}%`, background: used === null ? 'transparent' : used >= 90 ? 'var(--color-status-error)' : used >= 70 ? 'var(--color-status-permission)' : 'var(--color-status-success)' }} />
+                      <div className="h-6 bg-bg-dark">
+                        <div className="h-full" style={{ width: `${used ?? 0}%`, background: used === null ? 'transparent' : color }} />
                       </div>
-                      <div className="t-desc">{v?.resets_at ? t('tokens.acc.resets', { d: fmtReset(v.resets_at) }) : used === null ? t('tokens.acc.noDataWhy') : ''}</div>
                     </div>
                   );
                 })}
             </div>
             {(account.cost || account.context_window) && (
-              <div className="t-desc flex flex-wrap gap-x-16 gap-y-2">
+              <div className="t-desc flex flex-wrap gap-x-14">
                 {typeof account.context_window?.used_percentage === 'number' && <span>{t('tokens.acc.context', { p: Math.round(account.context_window.used_percentage) })}</span>}
-                {typeof account.cost?.total_cost_usd === 'number' && <span>{t('tokens.acc.cost', { c: account.cost.total_cost_usd.toFixed(2) })}</span>}
-                {typeof account.cost?.total_duration_ms === 'number' && <span>{t('tokens.acc.duration', { m: Math.round(account.cost.total_duration_ms / 60000) })}</span>}
-                {typeof account.cost?.total_lines_added === 'number' && <span>{t('tokens.acc.lines', { a: account.cost.total_lines_added, r: account.cost.total_lines_removed ?? 0 })}</span>}
+                {typeof account.cost?.total_cost_usd === 'number' && <span>${account.cost.total_cost_usd.toFixed(0)} API</span>}
+                {typeof account.cost?.total_duration_ms === 'number' && <span>{Math.round(account.cost.total_duration_ms / 3_600_000)} h</span>}
+                {typeof account.cost?.total_lines_added === 'number' && <span>+{account.cost.total_lines_added} / −{account.cost.total_lines_removed ?? 0}</span>}
               </div>
             )}
-            <div className="t-desc">{t('tokens.acc.planNote')}</div>
           </div>
         )}
         {act && (
@@ -222,17 +220,18 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
             <div className="flex items-center gap-8 mb-6">
               <span className="t-sub">{slide === 0 ? t('tokens.slideHeat') : t('tokens.slideCharts')}</span>
               <span className="ml-auto flex items-center gap-6">
-                <button className="flex items-center justify-center size-24 border-2 border-border text-text-muted hover:text-text disabled:opacity-30" disabled={slide === 0} onClick={() => setSlide(0)} title={t('tokens.slideHeat')}>
-                  <IconChevronLeft size={18} />
-                </button>
+                <IconButton label={t('tokens.slideHeat')} size="sm" disabled={slide === 0} onClick={() => setSlide(0)}>
+                  <ChevronLeft size={18} />
+                </IconButton>
                 {[0, 1].map((i) => (
                   <button key={i} className={`w-10 h-10 ${slide === i ? 'bg-accent' : 'bg-border hover:bg-text-muted'}`} onClick={() => setSlide(i)} title={i === 0 ? t('tokens.slideHeat') : t('tokens.slideCharts')} />
                 ))}
-                <button className="flex items-center justify-center size-24 border-2 border-border text-text-muted hover:text-text disabled:opacity-30" disabled={slide === 1} onClick={() => setSlide(1)} title={t('tokens.slideCharts')}>
-                  <IconChevronRight size={18} />
-                </button>
+                <IconButton label={t('tokens.slideCharts')} size="sm" disabled={slide === 1} onClick={() => setSlide(1)}>
+                  <ChevronRight size={18} />
+                </IconButton>
               </span>
             </div>
+            <div className="overflow-hidden">
             <div className="flex w-full transition-transform duration-300 ease-out" style={{ transform: `translateX(-${slide * 100}%)` }}>
               <div className="w-full shrink-0 pr-2 overflow-hidden">
                 <Heatmap values={act.days} format={(n) => t('activity.promptsN', { n })} extra={(k) => (act.tokDays[k] ? `${fmtTokens(act.tokDays[k])} tokens` : null)} />
@@ -241,6 +240,7 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
                 <HoursChart hours={act.hours} tokens={act.tokHours} />
                 <WeekdayChart days={inWindow(act.days)} tokensByDay={inWindow(act.tokDays)} />
               </div>
+            </div>
             </div>
           </div>
         )}
