@@ -55,7 +55,7 @@ Nunca arranques la oficina desde dentro de una sesión de Claude.
 
 Claude Code guarda cada conversación en `~/.claude/projects/`. Cubicle lee eso y propone las carpetas donde lo usaste la última semana: una carpeta con sesión que contiene otras con sesión es una **oficina**; ella y sus hijas, sus **agentes**. Marcas las que quieres, eliges idioma y skin, y listo.
 
-![Primer arranque](docs/img/onboarding.jpg)
+![Primer arranque](docs/img/primer-arranque.jpg)
 
 - Después: **+ Oficina**, **+ Agent** o Settings → *Importar sesiones de Claude*.
 - Cubicle abre la terminal de cada agente y, al reiniciar, reanuda su última conversación. Una sesión abierta en otra terminal no se duplica: se observa y se muestra.
