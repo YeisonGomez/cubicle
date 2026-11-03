@@ -80,6 +80,8 @@ export class OfficeState {
     return () => this.selectionListeners.delete(listener);
   }
   cameraFollowId: number | null = null;
+  /** Centrado de una sola vez: al elegir un agente desde la barra, la cámara va hasta él y luego suelta. */
+  cameraCenterOnceId: number | null = null;
   hoveredAgentId: number | null = null;
   hoveredTile: { col: number; row: number } | null = null;
   /** Maps "parentId:toolId" → sub-agent character ID (negative) */
@@ -790,6 +792,7 @@ export class OfficeState {
    *  automatic drivers: character follow and the greeter's ask. */
   breakCameraFollow(): void {
     this.cameraFollowId = null;
+    this.cameraCenterOnceId = null;
     this.cancelGreeterCamera();
   }
 
@@ -798,8 +801,10 @@ export class OfficeState {
   selectAndFollow(id: number): void {
     if (!this.characters.has(id)) return;
     this.selectedAgentId = id;
-    // Sin seguimiento de cámara: la vista de la oficina se queda fija.
+    // Sin seguimiento continuo: la cámara se centra UNA vez en el agente (si no estaba a la vista,
+    // ahora aparece en el centro) y después la vista se queda fija.
     this.cameraFollowId = null;
+    this.cameraCenterOnceId = id;
   }
 
   /** The agent that owns `id`'s terminal: a sub-agent's parent, else itself. */
@@ -818,6 +823,7 @@ export class OfficeState {
     }
     if (this.selectedAgentId === id) this.selectedAgentId = null;
     if (this.cameraFollowId === id) this.cameraFollowId = null;
+    if (this.cameraCenterOnceId === id) this.cameraCenterOnceId = null;
     this.restingIds.delete(id);
     // Start despawn animation instead of immediate delete
     startMatrixEffect(ch, 'despawn');
@@ -1014,6 +1020,7 @@ export class OfficeState {
     this.subagentMeta.delete(id);
     if (this.selectedAgentId === id) this.selectedAgentId = null;
     if (this.cameraFollowId === id) this.cameraFollowId = null;
+    if (this.cameraCenterOnceId === id) this.cameraCenterOnceId = null;
   }
 
   /** Remove all sub-agents belonging to a parent agent */
@@ -1041,6 +1048,7 @@ export class OfficeState {
         this.subagentMeta.delete(id);
         if (this.selectedAgentId === id) this.selectedAgentId = null;
         if (this.cameraFollowId === id) this.cameraFollowId = null;
+    if (this.cameraCenterOnceId === id) this.cameraCenterOnceId = null;
         toRemove.push(key);
       }
     }

@@ -185,7 +185,9 @@ export function OfficeCanvas({
         const followCh =
           officeState.cameraFollowId !== null
             ? officeState.characters.get(officeState.cameraFollowId)
-            : undefined;
+            : officeState.cameraCenterOnceId !== null
+              ? officeState.characters.get(officeState.cameraCenterOnceId)
+              : undefined;
         const cameraFocus = followCh ?? officeState.greeterCameraTarget;
         if (cameraFocus) {
           const layout = officeState.getLayout();
@@ -200,6 +202,8 @@ export function OfficeCanvas({
             Math.abs(dy) < CAMERA_FOLLOW_SNAP_THRESHOLD
           ) {
             panRef.current = { x: targetX, y: targetY };
+            // Centrado de una vez: al llegar, la cámara suelta al personaje.
+            if (officeState.cameraFollowId === null) officeState.cameraCenterOnceId = null;
           } else {
             panRef.current = {
               x: panRef.current.x + dx * CAMERA_FOLLOW_LERP,
