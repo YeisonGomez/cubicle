@@ -11,8 +11,10 @@ Fork de [Pixel Agents](https://github.com/pixel-agents-hq/pixel-agents) de Pablo
 | Antes | Con Cubicle |
 |---|---|
 | Un IDE por proyecto para ver qué tocó Claude | Pestaña **Cambios**: árbol y diff por repo, al lado de la terminal |
+| Reportes en pestañas del navegador que, si cierras, toca volver a buscar el HTML | Pestaña **Reportes**: siempre ahí, dentro del panel del proyecto |
 | Notas en cualquier parte | **Notas** por proyecto, compartidas por sus sesiones |
 | Revisar PRs a mano | **PRs**: Claude hace el informe ejecutivo de cada PR y resuelve los conflictos del que le pidas |
+| Sin idea de cuánto y cuándo trabajas con Claude | **Actividad**: estadísticas estilo GitHub de tus prompts, por día y por hora |
 
 ## Instalación
 
@@ -35,23 +37,16 @@ cubicle open        # abre la oficina en el navegador
 
 Nunca arranques la oficina desde dentro de una sesión de Claude.
 
-## Primer arranque y cómo detecta tus sesiones
+## Primer arranque
 
-Claude Code guarda cada conversación en `~/.claude/projects/`, una carpeta por directorio de trabajo. Cubicle lee eso.
-
-**Primer arranque.** Propone las carpetas donde usaste Claude Code la última semana, agrupadas: una carpeta con sesión que contiene otras con sesión es una **oficina**; ella y sus hijas, sus **agentes**. Ajustas nombres, marcas las que quieres, eliges idioma y skin, y listo.
+Claude Code guarda cada conversación en `~/.claude/projects/`. Cubicle lee eso y propone las carpetas donde lo usaste la última semana: una carpeta con sesión que contiene otras con sesión es una **oficina**; ella y sus hijas, sus **agentes**. Marcas las que quieres, eliges idioma y skin, y listo.
 
 ![Primer arranque](docs/img/onboarding.jpg)
 
-**Después.** **+ Oficina** crea una sala para una carpeta (nueva o existente). **+ Agent** abre una sesión más dentro de una oficina. Settings → *Importar sesiones de Claude* repite la detección cuando quieras.
-
-**Qué ves en la oficina.**
-- Cada agente es un personaje. Su terminal la abre Cubicle; al reiniciar, `--relaunch` reanuda la última conversación de cada uno.
-- Una sesión que ya tienes abierta en otra terminal no se duplica: Cubicle la observa y la muestra, pero no abre otra.
-- Settings → *Watch All Sessions* muestra también las sesiones que abras fuera de Cubicle, siempre que estén en una carpeta registrada. Corridas sueltas de scripts o bots no aparecen.
-- Su estado sale de los hooks de Claude Code (trabajando, pide permiso, te necesita, libre). Sin prompts en dos semanas, el personaje se va al sofá.
-
-**Configurar cada agente.** En su panel → Configuración: nombre, repositorios conocidos (para Cambios y PRs), carpetas de reportes y revisión de PRs.
+- Después: **+ Oficina**, **+ Agent** o Settings → *Importar sesiones de Claude*.
+- Cubicle abre la terminal de cada agente y, al reiniciar, reanuda su última conversación. Una sesión abierta en otra terminal no se duplica: se observa y se muestra.
+- Settings → *Watch All Sessions* muestra también sesiones abiertas fuera de Cubicle, solo en carpetas registradas.
+- Cada agente se configura en su panel: nombre, repositorios, carpetas de reportes y revisión de PRs.
 
 ## Recorrido
 
