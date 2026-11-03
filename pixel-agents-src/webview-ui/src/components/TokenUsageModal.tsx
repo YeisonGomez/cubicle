@@ -88,6 +88,8 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
   const [act, setAct] = useState<{ days: Record<string, number>; hours: number[]; tokDays: Record<string, number>; tokHours: number[] } | null>(null);
   const wheelAt = useRef(0);
   const [slide, setSlide] = useState(0);
+  // Cambio de ventana: se conservan los datos anteriores (atenuados) hasta que llegan los nuevos; vaciarlos encogía el modal y parecía cerrarse.
+  const [loading, setLoading] = useState(false);
   const [account, setAccount] = useState<AccountUsage | null>(null);
   useEffect(() => {
     fetch('./api/usage', { cache: 'no-store' })
@@ -118,12 +120,13 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     let alive = true;
-    setData(null);
+    setLoading(true);
     fetch(`./api/usage/tokens?days=${days}`, { cache: 'no-store' })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const d = (await r.json()) as TokenUsage;
         if (alive) {
+          setLoading(false);
           setData(d);
           setOpen(new Set(d.rooms.slice(0, 3).map((r) => r.label)));
         }
@@ -152,20 +155,6 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal isOpen title={t('tokens.title')} onClose={onClose} className="w-[760px] max-w-[95vw]">
       <div className="ide-ui flex flex-col gap-10">
-        <div className="flex items-center gap-10">
-          <span className="t-desc">{t('tokens.desc')}</span>
-          <span className="ml-auto flex gap-4">
-            {WINDOWS.map((w) => (
-              <button
-                key={w.days}
-                className={`px-8 py-3 text-[12px] ${days === w.days ? 'bg-active-bg text-text' : 'text-text-muted hover:text-text hover:bg-btn-hover'}`}
-                onClick={() => setDays(w.days)}
-              >
-                {t(w.key)}
-              </button>
-            ))}
-          </span>
-        </div>
         {account && (
           <div className="border-2 border-border px-10 py-8 flex flex-col gap-8">
             <div className="flex items-center gap-8">
@@ -205,6 +194,22 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
             )}
           </div>
         )}
+        <div className="flex items-center gap-10 pt-4 border-t-2 border-border">
+          <span className="t-sub">{t('tokens.period')}</span>
+          <span className="t-desc">{t('tokens.periodHelp')}</span>
+          <span className="ml-auto flex gap-4">
+            {WINDOWS.map((w) => (
+              <button
+                key={w.days}
+                className={`px-8 py-3 text-[12px] ${days === w.days ? 'bg-active-bg text-text' : 'text-text-muted hover:text-text hover:bg-btn-hover'}`}
+                onClick={() => setDays(w.days)}
+              >
+                {t(w.key)}
+              </button>
+            ))}
+          </span>
+        </div>
+        <div className={`flex flex-col gap-10 transition-opacity ${loading ? 'opacity-50' : ''}`}>
         {act && (
           <div
             className="border-2 border-border px-10 py-8 overflow-hidden"
@@ -294,6 +299,7 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
             </div>
           </>
         )}
+        </div>
       </div>
     </Modal>
   );

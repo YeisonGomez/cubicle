@@ -297,6 +297,8 @@ export const es: Record<string, string> = {
   'tokens.acc.duration': '{m} min de sesión',
   'tokens.acc.lines': '+{a} / −{r} líneas',
   'tokens.acc.planNote': 'Los límites los entrega Claude Code (statusline) según el plan de la cuenta con sesión iniciada; Claude Code no reporta el nombre del plan.',
+  'tokens.period': 'Período',
+  'tokens.periodHelp': 'Aplica a las gráficas y al consumo por sala',
   'tokens.desc': 'Tokens de entrada, salida y caché por sala y por agente.',
   'tokens.win.today': 'hoy',
   'tokens.win.7': '7 días',

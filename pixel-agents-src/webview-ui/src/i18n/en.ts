@@ -283,6 +283,8 @@ export const en: Record<string, string> = {
   'tokens.acc.duration': '{m} min of session',
   'tokens.acc.lines': '+{a} / −{r} lines',
   'tokens.acc.planNote': 'Limits come from Claude Code (statusline) for the plan of the signed-in account; Claude Code does not report the plan name.',
+  'tokens.period': 'Period',
+  'tokens.periodHelp': 'Applies to the charts and usage by room',
   'tokens.desc': 'Input, output and cache tokens by room and by agent.',
   'tokens.win.today': 'today',
   'tokens.win.7': '7 days',
