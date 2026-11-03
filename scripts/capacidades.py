@@ -41,7 +41,8 @@ NO incluyas carpetas locales, iCloud/Drive, repos ni la propia oficina. "tipo" �
 usas (nombre corto). "apps" = aplicaciones (Mail, Chrome, Notion, Slack, Terminal, Excel...). "skills" =
 tus habilidades (máx. 8), incluidas las que aún no son skills formales: "descripcion" = una frase corta;
 "detalle" = 2-4 frases en lenguaje natural explicando qué hace, cuándo se usa y cómo se pide.
-Empieza cada texto con mayúscula. Nombres cortos (máx. 30 caracteres)."""
+Empieza cada texto con mayúscula. Nombres cortos (máx. 30 caracteres).
+Después, lee la sección "Cubicle" de tu CLAUDE.md: ahí dice en qué carpeta van los reportes (HTML, nunca artifacts)."""
 
 PREGUNTA_EN = """Cubicle (pixel agents): register your external capabilities. Reply ONLY by running this command
 with the JSON filled in (no extra text), based on your CLAUDE.md, your skills, your MCP servers and what
@@ -63,7 +64,8 @@ Do NOT include local folders, iCloud/Drive, repos or the office itself. "tipo" �
 you use (short name). "apps" = applications (Mail, Chrome, Notion, Slack, Terminal, Excel...). "skills" =
 your skills (max 8), including ones that are not formal skills yet: "descripcion" = one short sentence;
 "detalle" = 2-4 sentences in plain English explaining what it does, when it is used and how to ask for it.
-Write every text in English, starting with a capital letter. Short names (max 30 characters)."""
+Write every text in English, starting with a capital letter. Short names (max 30 characters).
+Then read the "Cubicle" section of your CLAUDE.md: it says which folder reports go to (HTML, never artifacts)."""
 
 def pregunta_tpl():
     return PREGUNTA_EN if os.environ.get("OFICINA_LANG", "en") == "en" else PREGUNTA

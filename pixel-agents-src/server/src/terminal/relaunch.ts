@@ -9,7 +9,7 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { capabilitiesPromptFor } from '../capabilitiesPrompt.js';
+import { capabilitiesPromptFor, ensureProjectContext } from '../capabilitiesPrompt.js';
 import { transcriptLastActivity } from '../agentProjects.js';
 import { readConfig } from '../configPersistence.js';
 import type { LaunchStandaloneAgentDeps } from './standaloneAgentLauncher.js';
@@ -203,6 +203,7 @@ export async function relaunchAll(
     }
     // Sin sesiones previas (proyecto recién creado): se abre una conversación nueva.
     // Primera vez sin declaración de capacidades: la pregunta va como prompt inicial.
+    ensureProjectContext(d.name);
     const initialPrompt = options.askCapabilities === false ? null : capabilitiesPromptFor(d.name);
     const agentId = launchStandaloneAgent(deps, {
       directoryPath: cwd,

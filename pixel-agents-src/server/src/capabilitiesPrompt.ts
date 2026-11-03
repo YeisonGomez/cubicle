@@ -37,6 +37,18 @@ export function clearCapabilities(name: string): boolean {
   }
 }
 
+/** Escribe/actualiza el bloque "Cubicle" (carpeta de reportes, nada de artifacts) en el CLAUDE.md del
+ *  agente (o de todos si no se indica). Idempotente y barato: se llama al arrancar y en cada lanzamiento. */
+export function ensureProjectContext(name?: string): void {
+  const cli = path.join(scriptsDir(), 'contexto.py');
+  if (!fs.existsSync(cli)) return;
+  try {
+    execFileSync(pythonBin(), [cli, 'aplicar', ...(name ? [name] : [])], { encoding: 'utf8', timeout: 20_000, env: langEnv() });
+  } catch (e) {
+    console.warn('[contexto] no se pudo escribir el bloque de Cubicle:', e instanceof Error ? e.message : e);
+  }
+}
+
 /** Texto de la pregunta estándar, o null si el Directorio ya declaró (o no hay script). */
 export function capabilitiesPromptFor(name: string): string | null {
   if (!name || hasDeclaredCapabilities(name)) return null;
