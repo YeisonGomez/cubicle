@@ -41,6 +41,8 @@ Claude Code guarda cada conversación en `~/.claude/projects/`, una carpeta por 
 
 **Primer arranque.** Propone las carpetas donde usaste Claude Code la última semana, agrupadas: una carpeta con sesión que contiene otras con sesión es una **oficina**; ella y sus hijas, sus **agentes**. Ajustas nombres, marcas las que quieres, eliges idioma y skin, y listo.
 
+![Primer arranque](docs/img/onboarding.jpg)
+
 **Después.** **+ Oficina** crea una sala para una carpeta (nueva o existente). **+ Agent** abre una sesión más dentro de una oficina. Settings → *Importar sesiones de Claude* repite la detección cuando quieras.
 
 **Qué ves en la oficina.**
