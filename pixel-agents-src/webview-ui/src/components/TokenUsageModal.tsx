@@ -60,6 +60,14 @@ function fmtReset(ts: number | null | undefined): string {
   return new Date(ms).toLocaleString(locale(), { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+interface ModelRow { model: string; input: number; output: number; cacheWrite: number; cacheRead: number; replies: number }
+/** claude-fable-5-1 → Fable; claude-haiku-4-5-2025… → Haiku. Las versiones de una familia se suman. */
+function family(id: string): string {
+  const m = /^claude-([a-z]+)/.exec(id);
+  return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : id;
+}
+const fmtTok = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
+
 const WINDOWS: Array<{ days: number; key: string }> = [
   { days: 1, key: 'tokens.win.today' },
   { days: 7, key: 'tokens.win.7' },
@@ -91,6 +99,26 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
   // Cambio de ventana: se conservan los datos anteriores (atenuados) hasta que llegan los nuevos; vaciarlos encogía el modal y parecía cerrarse.
   const [loading, setLoading] = useState(false);
   const [account, setAccount] = useState<AccountUsage | null>(null);
+  // Semana por modelo (todos los transcripts de la cuenta): Claude Code no envía el límite por modelo.
+  const [models, setModels] = useState<Array<{ name: string; output: number; total: number; replies: number }> | null>(null);
+  useEffect(() => {
+    fetch('./api/usage/models?days=7', { cache: 'no-store' })
+      .then(async (r) => (r.ok ? ((await r.json()) as { models: ModelRow[] }) : null))
+      .then((d) => {
+        if (!d) return;
+        const by = new Map<string, { name: string; output: number; total: number; replies: number }>();
+        for (const m of d.models) {
+          const name = family(m.model);
+          const row = by.get(name) ?? { name, output: 0, total: 0, replies: 0 };
+          row.output += m.output;
+          row.total += m.input + m.output + m.cacheWrite + m.cacheRead;
+          row.replies += m.replies;
+          by.set(name, row);
+        }
+        setModels([...by.values()].sort((a, b) => b.output - a.output));
+      })
+      .catch(() => undefined);
+  }, []);
   useEffect(() => {
     fetch('./api/usage', { cache: 'no-store' })
       .then(async (r) => (r.ok ? ((await r.json()) as AccountUsage) : null))
@@ -184,6 +212,27 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
                   );
                 })}
             </div>
+            {models && models.length > 0 && (
+              <div className="flex flex-col gap-4" title={t('tokens.acc.byModelHelp')}>
+                <span className="t-label">{t('tokens.acc.byModel')}</span>
+                {(() => {
+                  const sum = models.reduce((a, m) => a + m.output, 0) || 1;
+                  return models.map((m) => {
+                    const share = (m.output / sum) * 100;
+                    return (
+                      <div key={m.name} className="flex items-center gap-8 text-[13px]">
+                        <span className="w-[70px] shrink-0 text-text">{m.name}</span>
+                        <div className="flex-1 h-6 bg-bg-dark">
+                          <div className="h-full bg-accent" style={{ width: `${share}%` }} />
+                        </div>
+                        <span className="w-[44px] text-right font-semibold">{pct(share)}</span>
+                        <span className="w-[190px] t-desc text-right">{t('tokens.acc.modelLine', { o: fmtTok(m.output), r: m.replies })}</span>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            )}
             {(account.cost || account.context_window) && (
               <div className="t-desc flex flex-wrap gap-x-14">
                 {typeof account.context_window?.used_percentage === 'number' && <span>{t('tokens.acc.context', { p: Math.round(account.context_window.used_percentage) })}</span>}

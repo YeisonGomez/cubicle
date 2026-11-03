@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import { persistedActivityStats, tokenUsageByDir, totalTokens, windowedHours } from '../activityStats.js';
 import { transcriptLastActivity } from '../agentProjects.js';
 import { capabilitiesFor } from '../capabilities.js';
+import { usageByModel } from '../modelUsage.js';
 import { clearCapabilities } from '../capabilitiesPrompt.js';
 import { readConfig } from '../configPersistence.js';
 import type { HttpServerOptions } from '../httpServer.js';
@@ -130,6 +131,12 @@ export function registerStatsRoutes(app: FastifyInstance, options: HttpServerOpt
       };
     }
     return out;
+  });
+
+  // Tokens por modelo en los últimos N días (todos los transcripts de la cuenta).
+  app.get<{ Querystring: { days?: string } }>('/api/usage/models', async (request) => {
+    const days = Math.max(1, Math.min(31, Number(request.query.days ?? 7) || 7));
+    return { days, models: usageByModel(days) };
   });
 
   // Límites de uso de la cuenta (sesión de 5 h y semana), escritos por la statusline.
