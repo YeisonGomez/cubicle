@@ -33,7 +33,13 @@ function readServerToken(): string | null {
     /* URL rara */
   }
   try {
-    if (fromUrl) localStorage.setItem(TOKEN_KEY, fromUrl);
+    if (fromUrl) {
+      localStorage.setItem(TOKEN_KEY, fromUrl);
+      // Ya quedó recordado: se quita de la barra de direcciones (y del historial).
+      const u = new URL(window.location.href);
+      u.searchParams.delete('token');
+      window.history.replaceState(window.history.state, '', u.pathname + u.search + u.hash);
+    }
     else return localStorage.getItem(TOKEN_KEY);
   } catch {
     /* sin almacenamiento */
