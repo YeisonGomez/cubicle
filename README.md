@@ -27,7 +27,7 @@ Construido sobre un fork de [Pixel Agents](https://github.com/pixel-agents-hq/pi
 Requisitos: macOS (o Linux, sin arranque automático), [Claude Code](https://docs.anthropic.com/claude-code) ya usado al menos una vez, Node 20+ y Python 3.
 
 ```bash
-git clone <este-repo> cubicle
+git clone https://github.com/YeisonGomez/cubicle.git cubicle
 cd cubicle
 ./install.sh        # dependencias, compilación, statusline y el comando `cubicle`
 cubicle install     # deja la oficina corriendo en segundo plano y abre sola al iniciar sesión
