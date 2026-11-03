@@ -168,6 +168,12 @@ export function AgentCardBar({
     if (lookedAt !== null && lookedAt !== undefined) markSeen(lookedAt);
   }, [lookedAt, markSeen]);
   const unseen = (id: number) => pending.has(id) && id !== lookedAt;
+  // Al seleccionar un agente (ficha, personaje o terminal), la barra se desplaza para centrar su ficha.
+  useEffect(() => {
+    if (activeAgentId === null) return;
+    const el = cardRefs.current.get(activeAgentId);
+    el?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  }, [activeAgentId]);
   const unseenKey = [...pending].filter((id) => id !== lookedAt).sort((a, b) => a - b).join(',');
   useEffect(() => {
     onUnseenChange?.(unseenKey ? unseenKey.split(',').map(Number) : []);
