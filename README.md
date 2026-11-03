@@ -1,21 +1,18 @@
 # Cubicle · v2.0
 
-**Una oficina pixel-art para tus sesiones de Claude Code.** Cada proyecto es una sala y cada sesión un personaje. Un clic y tienes su terminal, sus cambios git, sus reportes y su actividad. Sin IDE abierto por proyecto, sin diez pestañas.
+**Una oficina pixel-art para tus sesiones de Claude Code.** Cada proyecto es una sala y cada sesión un personaje. Un clic y tienes su terminal, sus cambios git, sus reportes y su actividad.
 
 Fork de [Pixel Agents](https://github.com/pixel-agents-hq/pixel-agents) de Pablo De Lucca (MIT). Interfaz en español e inglés. Skin Pokémon opcional.
 
-> **English:** a pixel-art command center for your Claude Code sessions: one room per project, one character per session, terminal + git changes + HTML reports + activity, PR review, project cards, usage meters, optional Pokémon skin, one-command install. Fork of Pixel Agents (MIT). UI in English and Spanish.
-
-![La oficina](docs/img/oficina.jpg)
+> **English:** a pixel-art command center for your Claude Code sessions: one room per project, one character per session, terminal + git changes + HTML reports + PR review + activity, project cards, usage meters, optional Pokémon skin, one-command install. Fork of Pixel Agents (MIT). UI in English and Spanish.
 
 ## Qué cambia
 
 | Antes | Con Cubicle |
 |---|---|
 | Un IDE por proyecto para ver qué tocó Claude | Pestaña **Cambios**: árbol y diff por repo, al lado de la terminal |
-| Reportes como artefactos sueltos | Pestaña **Reportes**: HTML del proyecto, dentro del panel |
-| Terminales sin saber cuál es cuál | Un personaje por sesión, en su sala, con su estado |
-| ¿Cuánto llevo de mi cuenta? ¿En qué? | Medidor de sesión y semana, consumo por sala y agente |
+| Notas en cualquier parte | **Notas** por proyecto, compartidas por sus sesiones |
+| Revisar PRs a mano | **PRs**: Claude hace el informe ejecutivo de cada PR y resuelve los conflictos del que le pidas |
 
 ## Instalación
 
@@ -44,46 +41,67 @@ Cubicle detecta las carpetas donde usaste Claude Code la última semana y las pr
 
 ## Recorrido
 
-### Terminal y Cambios
+### La oficina
 
-Clic en un personaje o en su ficha: se abre su terminal a la derecha y su panel a la izquierda. **Cambios** muestra los archivos sin commit de cada repo del agente, con diff.
+Una sala por proyecto, un personaje por sesión, con su estado. Arriba, las fichas por sala; a la derecha, el uso de tu cuenta.
 
-![Terminal y Cambios](docs/img/terminal-cambios.jpg)
+![La oficina](docs/img/oficina.jpg)
+
+### Terminal y panel
+
+Clic en un personaje o en su ficha: terminal a la derecha, panel a la izquierda.
+
+![Terminal y panel](docs/img/terminal-cambios.jpg)
+
+### Cambios
+
+Archivos sin commit de cada repo del agente, con diff.
+
+![Cambios](docs/img/cambios-diff.jpg)
 
 ### Reportes
 
-Los `*.html` de `docs/reports/` del proyecto, dentro del panel y a pantalla completa para presentar. **Nuevo reporte**: describes qué quieres ver y la sesión lo genera. Es HTML directo en tu repo, personalizable, sin llenar el proyecto de artefactos.
+Los `*.html` de `docs/reports/` del proyecto, dentro del panel o a pantalla completa. **Nuevo reporte**: describes qué quieres ver y la sesión lo genera. HTML directo en tu repo, personalizable, sin llenar el proyecto de artefactos.
 
 ![Reportes](docs/img/reportes.jpg)
 
-### Ficha de proyecto
+### PRs
 
-Clic en el nombre de una sala (barra o letrero): qué es el proyecto en una línea, agentes con su rol, subcarpetas con repo, rama y último commit. Lo escribe una sola vez la propia sesión, leyendo su `CLAUDE.md` o README; Cubicle lo recuerda.
+Los PRs abiertos de cada repo. **Informe ejecutivo**: Claude revisa el PR por su naturaleza, no por su tamaño, y deja el informe en la terminal y como HTML en Reportes. **Resolver conflictos**: lo hace en un worktree aparte y pregunta antes de hacer push.
 
-![Ficha de proyecto](docs/img/ficha-proyecto.jpg)
+![PRs](docs/img/prs.jpg)
 
-### Actividad, capacidades y consumo
+### Actividad
 
-- **Actividad**: mapa de calor de prompts por día y por hora.
-- **Capacidades**: bases de datos, APIs, nube, MCP, apps y skills de cada sesión, declaradas por ella misma la primera vez.
-- **Consumo**: tokens por sala y agente (hoy, 7 días, 30, todo). Sale de los transcripts.
-- **PRs** (opcional): PRs abiertos de cada repo; informe ejecutivo o resolución de conflictos con un clic, hechos por la sesión.
+Prompts por día y por hora, días de la semana y prompts por semana.
 
 ![Actividad](docs/img/actividad.jpg)
 
+### Capacidades
+
+Bases de datos, APIs, nube, correo, MCP, apps y skills de cada sesión, declarados por ella misma la primera vez.
+
+![Capacidades](docs/img/capacidades.jpg)
+
+### Consumo
+
+Tokens por sala y agente: hoy, 7 días, 30 o todo. Sale de los transcripts.
+
 ![Consumo](docs/img/consumo.jpg)
 
-### La oficina
+### Ficha de proyecto
 
-Salas por filas, cada una con tema y letrero. En la pared, la biblioteca crece con los archivos del proyecto, el televisor abre sus reportes y el tablero sus notas. Las fichas de la barra se arrastran y se fijan. Cuando una sesión termina o te pregunta algo mientras no la miras, su ficha late y el personaje salta; se calma al abrirla. Sin prompts en dos semanas, el personaje se va al sofá.
+Clic en el nombre de una sala: qué es el proyecto, agentes con su rol, subcarpetas con repo, rama y último commit. Lo escribe una sola vez la propia sesión.
+
+![Ficha de proyecto](docs/img/ficha-proyecto.jpg)
 
 ### Personajes: clásico o Pokémon
 
-En Ajustes → Personajes (o en el primer arranque). Con **Pokémon**, cada oficina es un tipo (fuego, agua, planta, eléctrico…) con sus colores y su piso, y cada agente un Pokémon al azar de ese tipo, de las dos primeras generaciones, animado. "Volver a sortear" reparte otros.
+En Ajustes → Personajes. Con **Pokémon**, cada oficina es un tipo (fuego, agua, planta…) con sus colores y su piso, y cada agente un Pokémon al azar de ese tipo, animado.
 
 ![Oficina Pokémon](docs/img/oficina-pokemon.jpg)
 
-Sprites del proyecto [vscode-pokemon](https://github.com/jakobhoeg/vscode-pokemon) (CC0), cargados en el navegador; no se guardan aquí. Pokémon es propiedad de The Pokémon Company, Nintendo y Game Freak; este skin es un homenaje para uso personal, sin afiliación.
+Sprites del proyecto [vscode-pokemon](https://github.com/jakobhoeg/vscode-pokemon) (CC0), cargados en el navegador; no se guardan aquí. Pokémon es propiedad de The Pokémon Company, Nintendo y Game Freak; homenaje para uso personal, sin afiliación.
 
 ## Dónde vive cada cosa
 
