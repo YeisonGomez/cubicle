@@ -262,6 +262,7 @@ export const en: Record<string, string> = {
   'overlay.rest': 'Send to rest (to the sofa; leaves the bar)',
 
   'usage.session': 'Session',
+  'usage.planTitle': 'Plan: {p}',
   'usage.week': 'Week',
   'usage.meterTitle': '{label}: {pct}% used{reset}',
   'usage.resets': ' · resets {t}',
@@ -281,6 +282,7 @@ export const en: Record<string, string> = {
   'tokens.acc.noDataWhy': 'Claude Code did not report this window (depends on plan and moment).',
   'tokens.acc.left': '{n}% left',
   'tokens.acc.resets': 'resets {d}',
+  'tokens.acc.otherModels': 'Other models',
   'tokens.acc.byModel': 'Week by model',
   'tokens.acc.byModelHelp': 'Share of output tokens in the last 7 days, from all your Claude Code transcripts. Claude Code does not report a per-model limit, so this is the real split, not the % of a limit.',
   'tokens.acc.modelLine': '{o} output · {r} replies',

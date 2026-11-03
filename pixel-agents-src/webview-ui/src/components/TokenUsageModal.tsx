@@ -41,6 +41,7 @@ interface AccountUsage {
   rate_limits?: Record<string, RateLimit | null> | null;
   model?: string | null;
   modelId?: string | null;
+  plan?: { name: string | null; type: string | null; tier: string | null } | null;
   cost?: { total_cost_usd?: number; total_duration_ms?: number; total_lines_added?: number; total_lines_removed?: number } | null;
   context_window?: { used_percentage?: number; context_window_size?: number } | null;
   version?: string | null;
@@ -108,7 +109,8 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
         if (!d) return;
         const by = new Map<string, { name: string; output: number; total: number; replies: number }>();
         for (const m of d.models) {
-          const name = family(m.model);
+          // Fable tiene su propia cuota; el resto de modelos (Opus, Sonnet, Haiku…) va junto.
+          const name = family(m.model) === 'Fable' ? 'Fable' : t('tokens.acc.otherModels');
           const row = by.get(name) ?? { name, output: 0, total: 0, replies: 0 };
           row.output += m.output;
           row.total += m.input + m.output + m.cacheWrite + m.cacheRead;
@@ -187,12 +189,14 @@ export function TokenUsageModal({ onClose }: { onClose: () => void }) {
           <div className="border-2 border-border px-10 py-8 flex flex-col gap-8">
             <div className="flex items-center gap-8">
               <span className="t-sub" title={t('tokens.acc.planNote')}>{t('tokens.acc.title')}</span>
-              <span className="t-desc">{account.model ?? ''}</span>
+              {account.plan?.name && <span className="text-accent-bright text-[13px]">{account.plan.name}</span>}
               <span className="ml-auto t-desc">{new Date(account.updatedAt * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
             <div className="grid grid-cols-2 gap-x-16 gap-y-6">
               {Object.entries({ five_hour: account.five_hour, seven_day: account.seven_day, ...(account.rate_limits ?? {}) })
                 .filter(([k], i, arr) => arr.findIndex(([x]) => x === k) === i)
+                // Ventana no reportada (p. ej. la sesión de 5 h, que Claude Code ya no envía): no se muestra.
+                .filter(([, v]) => typeof v?.used_percentage === 'number')
                 .map(([k, v]) => {
                   const used = typeof v?.used_percentage === 'number' ? Math.round(v.used_percentage) : null;
                   const color = used === null ? 'var(--color-text-muted)' : used >= 90 ? 'var(--color-status-error)' : used >= 70 ? 'var(--color-status-permission)' : 'var(--color-status-success)';

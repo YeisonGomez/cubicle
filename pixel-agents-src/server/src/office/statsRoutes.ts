@@ -5,6 +5,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import * as fs from 'fs';
+import * as os from 'os';
 
 import { persistedActivityStats, tokenUsageByDir, totalTokens, windowedHours } from '../activityStats.js';
 import { transcriptLastActivity } from '../agentProjects.js';
@@ -17,6 +18,19 @@ import { activityFile, capabilitiesFile, officeDir, usageFile } from '../officeP
 import * as path from 'path';
 import { relaunchAll } from '../terminal/relaunch.js';
 import { bearerAuth, launchDeps } from './shared.js';
+
+/** Plan de la cuenta de Claude (~/.claude.json → oauthAccount): solo nombre, tipo y nivel; nada personal. */
+function claudePlan(): { name: string | null; type: string | null; tier: string | null } | null {
+  try {
+    const d = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8')) as { oauthAccount?: Record<string, unknown> };
+    const a = d.oauthAccount;
+    if (!a) return null;
+    const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
+    return { name: str(a.planDisplayName), type: str(a.organizationType), tier: str(a.organizationRateLimitTier) ?? str(a.userRateLimitTier) };
+  } catch {
+    return null;
+  }
+}
 
 function dirsOfRoom(label: string) {
   const cfg = readConfig();
@@ -142,7 +156,8 @@ export function registerStatsRoutes(app: FastifyInstance, options: HttpServerOpt
   // Límites de uso de la cuenta (sesión de 5 h y semana), escritos por la statusline.
   app.get('/api/usage', async () => {
     try {
-      return JSON.parse(fs.readFileSync(usageFile(), 'utf8')) as unknown;
+      const u = JSON.parse(fs.readFileSync(usageFile(), 'utf8')) as Record<string, unknown>;
+      return { ...u, plan: claudePlan() };
     } catch {
       return null;
     }

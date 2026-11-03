@@ -275,6 +275,7 @@ export const es: Record<string, string> = {
 
   // ── Uso de la cuenta ──
   'usage.session': 'Sesión',
+  'usage.planTitle': 'Plan: {p}',
   'usage.week': 'Semana',
   'usage.meterTitle': '{label}: {pct}% usado{reset}',
   'usage.resets': ' · se reinicia {t}',
@@ -295,6 +296,7 @@ export const es: Record<string, string> = {
   'tokens.acc.noDataWhy': 'Claude Code no entregó esta ventana (depende del plan y del momento).',
   'tokens.acc.left': 'queda {n}%',
   'tokens.acc.resets': 'se reinicia {d}',
+  'tokens.acc.otherModels': 'Otros modelos',
   'tokens.acc.byModel': 'Semana por modelo',
   'tokens.acc.byModelHelp': 'Proporción de tokens de salida en los últimos 7 días, de todos tus transcripts de Claude Code. Claude Code no envía el límite por modelo, así que es el reparto real, no el % de un límite.',
   'tokens.acc.modelLine': '{o} de salida · {r} respuestas',

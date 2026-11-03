@@ -8,6 +8,8 @@ import { IconButton } from './ui/IconButton.js';
 interface Usage {
   five_hour: { used_percentage?: number; resets_at?: number } | null;
   seven_day: { used_percentage?: number; resets_at?: number } | null;
+  rate_limits?: Record<string, { used_percentage?: number; resets_at?: number } | null> | null;
+  plan?: { name: string | null; type: string | null; tier: string | null } | null;
   model: string | null;
   updatedAt: number;
 }
@@ -73,14 +75,18 @@ export function UsageBadge({ working }: { working: number }) {
     <div className="ide-ui flex items-center gap-16">
       <span className={`flex items-center gap-16 ${stale ? 'opacity-50' : ''}`} title={stale ? t('usage.stale') : undefined}>
         {usage && typeof day === 'number' && <Meter label={t('usage.session')} pct={Math.round(day)} reset={fmtReset(usage.five_hour?.resets_at)} />}
-        {usage && typeof day !== 'number' && (
-          // Claude Code no entregó la ventana de 5 h (five_hour: null): no es 0 %, es "sin dato".
-          <span className="flex items-center gap-6 text-[12px] text-text-muted" title={t('usage.noSession')}>
-            <span className="uppercase tracking-wider">{t('usage.session')}</span>
-            <span>—</span>
+        {usage?.plan?.name && (
+          <span className="text-[11px] uppercase tracking-wide text-accent-bright" title={t('usage.planTitle', { p: usage.plan.name })}>
+            {usage.plan.name}
           </span>
         )}
         {typeof week === 'number' && <Meter label={t('usage.week')} pct={Math.round(week)} reset={fmtReset(usage?.seven_day?.resets_at, true)} />}
+        {/* Ventanas por modelo (seven_day_<modelo>) si Claude Code llega a enviarlas; hoy solo envía la semanal total. */}
+        {Object.entries(usage?.rate_limits ?? {})
+          .filter(([k, v]) => /^seven_day_./.test(k) && typeof v?.used_percentage === 'number')
+          .map(([k, v]) => (
+            <Meter key={k} label={`${t('usage.week')} ${k.slice(9)}`} pct={Math.round(v!.used_percentage!)} reset="" />
+          ))}
       </span>
       {working > 0 && (
         <span className="text-[12px] text-accent-bright" title={t('usage.workingTitle')}>
