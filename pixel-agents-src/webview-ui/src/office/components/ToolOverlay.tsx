@@ -293,7 +293,7 @@ export function ToolOverlay({
               className="absolute flex flex-col items-center -translate-x-1/2"
               style={{
                 left: screenX,
-                top: screenY - (hasExtraLines ? 34 : 28) - (ch.skin && !isSub ? 10 : 0),
+                top: screenY - (hasExtraLines ? 34 : 28) - (ch.skin && !isSub ? 12 : 0),
                 pointerEvents: isSelected ? 'auto' : 'none',
                 // Opaca siempre: con transparencia no se leía sobre pisos con dibujo.
                 opacity: alwaysShowOverlay && !isSelected && !isHovered && isSub ? 0.8 : 1,
@@ -323,7 +323,7 @@ export function ToolOverlay({
                     </span>
                   )}
                   {ch.skin && !isSub && (
-                    <span className="overflow-hidden text-ellipsis block leading-none text-text-muted" style={{ fontSize: '16px', marginBottom: 2 }}>
+                    <span className="overflow-hidden text-ellipsis block leading-none font-bold text-text-muted" style={{ fontSize: '22px' }}>
                       {ch.skin.name}
                     </span>
                   )}
