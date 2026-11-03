@@ -209,6 +209,12 @@ export interface Character {
    *  false/undefined when the agent simply finished its turn (checkmark only,
    *  label falls through to idle). */
   waitingAwaitingInput?: boolean;
+  /** Te necesita y aún no lo has mirado: el personaje salta hasta que abras su terminal. */
+  attention?: boolean;
+  /** Descansando en el sofá: no pasea ni se levanta hasta que despierte. */
+  resting?: boolean;
+  /** Skin alternativo (tema Pokémon): imagen que sustituye al muñeco y su nombre. */
+  skin?: { url: string; walk: string; name: string } | null;
   /** Countdown timer for bubble (waiting: 2→0, permission: unused) */
   bubbleTimer: number;
   /** Timer to stay seated while inactive after seat reassignment (counts down to 0) */

@@ -1,3 +1,4 @@
+import { PanelRightClose } from 'lucide-react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 
 import { TERMINAL_DRAWER_RESIZE_HANDLE_PX } from '../constants.js';
@@ -7,7 +8,7 @@ import type { AgentAppearance, TabStatus } from './AgentCard.js';
 import type { CardGroup } from './AgentCardBar.js';
 import { AgentCardBar } from './AgentCardBar.js';
 import { TerminalPaneStack } from './TerminalPaneStack.js';
-import { Button } from './ui/Button.js';
+import { IconButton } from './ui/IconButton.js';
 
 interface TerminalDrawerProps {
   /** Agent ids with a live PTY, in open order. */
@@ -106,16 +107,10 @@ export function TerminalDrawer({
         {/* Close the panel. Floats over the pane's top-right corner so the
             panel needs no header bar of its own — ghost keeps it invisible
             over terminal content until hovered. */}
-        <div className="absolute top-4 right-4 z-50">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClosePanel}
-            className="hover:bg-btn-hover"
-            title={t('terminal.close')}
-          >
-            {'>'}
-          </Button>
+        <div className="absolute top-4 right-4 z-50 ide-ui">
+          <IconButton label={t('terminal.close')} size="sm" onClick={onClosePanel}>
+            <PanelRightClose size={14} />
+          </IconButton>
         </div>
 
         <div className="relative flex-1 min-h-0 p-4">

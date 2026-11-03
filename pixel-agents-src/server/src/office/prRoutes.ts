@@ -13,6 +13,7 @@ import { promisify } from 'util';
 import { agentInfo } from '../agentProjects.js';
 import type { HttpServerOptions } from '../httpServer.js';
 import { scriptsDir } from '../officePaths.js';
+import { getOfficeLang } from './language.js';
 import { bearerAuth, writePromptToAgent } from './shared.js';
 
 const run = promisify(execFile);
@@ -85,13 +86,19 @@ async function listPrs(repoPath: string, name: string): Promise<RepoPrs> {
 }
 
 function promptFor(action: string, vars: Record<string, string>): string | null {
-  const file = path.join(scriptsDir(), 'prompts', `pr-${action}.md`);
-  let text: string;
-  try {
-    text = fs.readFileSync(file, 'utf8');
-  } catch {
-    return null;
+  // Plantilla en el idioma de la oficina (pr-informe.en.md); la base (.md) está en español.
+  const dir = path.join(scriptsDir(), 'prompts');
+  const lang = getOfficeLang();
+  let text: string | null = null;
+  for (const name of [`pr-${action}.${lang}.md`, `pr-${action}.md`]) {
+    try {
+      text = fs.readFileSync(path.join(dir, name), 'utf8');
+      break;
+    } catch {
+      /* siguiente */
+    }
   }
+  if (text === null) return null;
   return text.replace(/\{\{(\w+)\}\}/g, (_, k: string) => vars[k] ?? '').replace(/\s*\n+\s*/g, ' ').trim();
 }
 

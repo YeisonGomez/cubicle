@@ -19,7 +19,8 @@ export interface AgentAppearance {
 }
 
 /** Agent activity reflected by the tab's status dot. */
-export type AgentActivity = 'idle' | 'working' | 'attention';
+/** `attention` = espera un permiso; `question` = terminó o te preguntó algo y espera tu respuesta. */
+export type AgentActivity = 'idle' | 'working' | 'attention' | 'question';
 
 /** Activity plus the drawer-owned "connection broken" state. */
 export type TabStatus = AgentActivity | 'disconnected';
@@ -27,7 +28,8 @@ export type TabStatus = AgentActivity | 'disconnected';
 const STATUS_DOT: Record<TabStatus, string> = {
   idle: 'bg-status-success', // verde — turno terminado
   working: 'bg-accent-bright animate-pulse', // azul pulsante — ejecutando
-  attention: 'bg-status-permission animate-bounce', // amarillo saltando — te necesita
+  attention: 'bg-status-permission animate-bounce', // amarillo saltando — necesita permiso
+  question: 'bg-status-permission', // amarillo fijo — te necesita (terminó / preguntó)
   disconnected: 'bg-status-error', // rojo — se cayó el socket de la terminal
 };
 
@@ -35,6 +37,7 @@ const STATUS_KEY: Record<TabStatus, StatusKey> = {
   idle: 'idle',
   working: 'working',
   attention: 'permission',
+  question: 'question',
   disconnected: 'disconnected',
 };
 
@@ -42,6 +45,7 @@ const STATUS_TEXT: Record<TabStatus, string> = {
   idle: 'text-text-muted',
   working: 'text-accent-bright',
   attention: 'text-status-permission',
+  question: 'text-status-permission',
   disconnected: 'text-status-error',
 };
 
@@ -75,6 +79,8 @@ interface AgentCardProps {
   onPin?: (agentId: number) => void;
   /** Color de su sala (solo en la sección de fijados, para saber de dónde es). */
   roomColor?: string | null;
+  /** Te necesita y aún no has abierto su terminal: la ficha late suavemente hasta que lo hagas. */
+  unseen?: boolean;
 }
 
 /** One agent's card in the terminal sidebar — mug shot, name and an animated
@@ -96,6 +102,7 @@ export function AgentCard({
   pinned = false,
   onPin,
   roomColor = null,
+  unseen = false,
 }: AgentCardProps) {
   const { t } = useT();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -214,14 +221,16 @@ export function AgentCard({
       )}</>;
 
   const working = status === 'working';
-  const attention = status === 'attention';
-  const statusLabel = resting ? statusText('resting') : status ? statusText(STATUS_KEY[status]) : statusText('new');
-  const statusCls = resting ? 'text-text-muted' : status ? STATUS_TEXT[status] : 'text-text-muted';
+  // Terminó un turno y aún no lo has visto: se muestra como "te necesita".
+  const effStatus: TabStatus | null = unseen && status === 'idle' ? 'question' : status;
+  const attention = effStatus === 'attention' || effStatus === 'question';
+  const statusLabel = resting ? statusText('resting') : effStatus ? statusText(STATUS_KEY[effStatus]) : statusText('new');
+  const statusCls = resting ? 'text-text-muted' : effStatus ? STATUS_TEXT[effStatus] : 'text-text-muted';
 
   if (compact) {
     return (
       <div
-        className={`ide-ui group pointer-events-auto relative flex items-center gap-8 pl-6 pr-10 py-4 cursor-pointer border-2 shrink-0 w-[168px] ${CARD_VARIANT[variant]}`}
+        className={`ide-ui group pointer-events-auto relative flex items-center gap-8 pl-6 pr-10 py-4 cursor-pointer border-2 shrink-0 w-[168px] ${CARD_VARIANT[variant]} ${unseen ? 'card-unseen' : ''}`}
         onClick={onCardClick}
         onContextMenu={onContextMenu}
         title={name ? t('card.tipOptions', { name }) : `Agent ${agentId}`}
@@ -235,7 +244,7 @@ export function AgentCard({
           <CharacterMugShot palette={appearance.palette} hueShift={appearance.hueShift} size={28} />
           <span
             className={`absolute -right-3 -bottom-3 size-8 border-2 border-bg ${
-              status ? STATUS_DOT[status] : 'bg-transparent border-transparent'
+              effStatus ? STATUS_DOT[effStatus] : 'bg-transparent border-transparent'
             }`}
           />
         </div>

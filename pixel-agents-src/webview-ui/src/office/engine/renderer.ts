@@ -42,7 +42,70 @@ import {
   VOID_TILE_DASH_PATTERN,
   VOID_TILE_OUTLINE_COLOR,
 } from '../../constants.js';
+import { decompressFrames, parseGIF } from 'gifuct-js';
+
 import { getColorizedFloorSprite, hasFloorSprites, WALL_COLOR } from '../floorTiles.js';
+
+// Skins animados (tema Pokémon): GIF de 32x32 a 8 fps del proyecto vscode-pokemon,
+// decodificados por frames (gifuct-js) para dibujarlos en el canvas con orden de
+// profundidad como a cualquier personaje. Miran a la derecha; se voltean hacia la izquierda.
+interface SkinAnim {
+  frames: HTMLCanvasElement[];
+  ends: number[]; // instante (ms acumulados) en que termina cada frame
+  total: number;
+  w: number;
+  h: number;
+}
+const skinAnims = new Map<string, SkinAnim | null>();
+function loadSkinAnim(url: string): void {
+  skinAnims.set(url, null);
+  fetch(url)
+    .then((r) => r.arrayBuffer())
+    .then((buf) => {
+      const gif = parseGIF(buf);
+      const frames = decompressFrames(gif, true);
+      const w = gif.lsd.width;
+      const h = gif.lsd.height;
+      const work = document.createElement('canvas');
+      work.width = w;
+      work.height = h;
+      const wc = work.getContext('2d')!;
+      const tmp = document.createElement('canvas');
+      const tc = tmp.getContext('2d')!;
+      const out: HTMLCanvasElement[] = [];
+      const ends: number[] = [];
+      let t = 0;
+      let prev: (typeof frames)[number] | null = null;
+      for (const f of frames) {
+        if (prev && prev.disposalType === 2) wc.clearRect(prev.dims.left, prev.dims.top, prev.dims.width, prev.dims.height);
+        tmp.width = f.dims.width;
+        tmp.height = f.dims.height;
+        tc.putImageData(new ImageData(new Uint8ClampedArray(f.patch), f.dims.width, f.dims.height), 0, 0);
+        wc.drawImage(tmp, f.dims.left, f.dims.top);
+        const snap = document.createElement('canvas');
+        snap.width = w;
+        snap.height = h;
+        snap.getContext('2d')!.drawImage(work, 0, 0);
+        out.push(snap);
+        t += Math.max(20, f.delay || 100);
+        ends.push(t);
+        prev = f;
+      }
+      if (out.length > 0) skinAnims.set(url, { frames: out, ends, total: t, w, h });
+    })
+    .catch(() => skinAnims.set(url, null));
+}
+function skinFrame(url: string): { img: HTMLCanvasElement; w: number; h: number } | null {
+  if (!skinAnims.has(url)) loadSkinAnim(url);
+  const a = skinAnims.get(url);
+  if (!a) return null;
+  const t = performance.now() % a.total;
+  let i = 0;
+  while (i < a.ends.length - 1 && t >= a.ends[i]) i++;
+  return { img: a.frames[i], w: a.w, h: a.h };
+}
+/** El GIF (32 px) se dibuja a tamaño natural en píxeles de mundo (2 tiles): el Pokémon queda algo más bajo que el muñeco. */
+const SKIN_SCALE = 1;
 import { mapOffset } from '../projection.js';
 import {
   getCarpetJunctionSprite,
@@ -62,7 +125,7 @@ import type {
   SpriteData,
   TileType as TileTypeVal,
 } from '../types.js';
-import { CharacterState, TILE_SIZE, TileType } from '../types.js';
+import { CharacterState, Direction, TILE_SIZE, TileType } from '../types.js';
 import { getWallInstances, hasWallSprites, wallColorToHex } from '../wallTiles.js';
 import { getCharacterSprite } from './characters.js';
 import { renderMatrixEffect } from './matrixEffect.js';
@@ -389,7 +452,9 @@ export function renderScene(
     const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0;
     // Anchor at bottom-center of character — round to integer device pixels
     const drawX = Math.round(offsetX + ch.x * zoom - cached.width / 2);
-    const drawY = Math.round(offsetY + (ch.y + sittingOffset) * zoom - cached.height);
+    // Salto mientras te necesita y no lo has mirado (seno rectificado: rebota en el suelo).
+    const hop = ch.attention ? Math.abs(Math.sin(performance.now() / 160)) * 5 : 0;
+    const drawY = Math.round(offsetY + (ch.y + sittingOffset - hop) * zoom - cached.height);
 
     // Sort characters by bottom of their tile (not center) so they render
     // in front of same-row furniture (e.g. chairs) but behind furniture
@@ -436,6 +501,34 @@ export function renderScene(
           c.restore();
         },
       });
+    }
+
+    const skinFr = ch.skin ? skinFrame(ch.state === CharacterState.WALK ? ch.skin.walk : ch.skin.url) : null;
+    if (skinFr) {
+      // Sprite Pokémon animado: escala entera (nítido), anclado abajo al centro del personaje.
+      const w = skinFr.w * SKIN_SCALE * zoom;
+      const h = skinFr.h * SKIN_SCALE * zoom;
+      const x = Math.round(offsetX + ch.x * zoom - w / 2);
+      const y = Math.round(offsetY + (ch.y + sittingOffset) * zoom - h);
+      const flip = ch.dir === Direction.LEFT;
+      const img = skinFr.img;
+      drawables.push({
+        zY: charZY,
+        draw: (c) => {
+          c.save();
+          c.imageSmoothingEnabled = false;
+          c.globalAlpha = alpha;
+          if (flip) {
+            c.translate(x + w, y);
+            c.scale(-1, 1);
+            c.drawImage(img, 0, 0, w, h);
+          } else {
+            c.drawImage(img, x, y, w, h);
+          }
+          c.restore();
+        },
+      });
+      continue;
     }
 
     drawables.push({

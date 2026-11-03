@@ -8,6 +8,7 @@ import { Button } from './ui/Button.js';
 import { Checkbox } from './ui/Checkbox.js';
 import { MenuItem } from './ui/MenuItem.js';
 import { Modal } from './ui/Modal.js';
+import { SkinPicker } from './SkinPicker.js';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -90,6 +91,8 @@ export function SettingsModal({
           ))}
         </span>
       </div>
+      {/* Skin de los personajes (clásico / Pokémon), guardado en el servidor. */}
+      <SkinPicker />
       {/* Open Sessions Folder opens an OS file manager — impossible in the browser. */}
       {onImportSessions && (
         <MenuItem

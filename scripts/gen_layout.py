@@ -45,12 +45,15 @@ areas = [None] * (COLS * ROWS)
 def put(c, r, v, col=None, area=None):
     i = r * COLS + c; tiles[i] = v; colors[i] = col; areas[i] = area
 
-_t = int(time.time() * 1000)
-def uid():
-    global _t; _t += 7
-    return f"f-{_t}-" + "".join(random.choices(string.ascii_lowercase + string.digits, k=4))
+# uid determinista (tipo + posición): el mismo mueble conserva su uid entre regeneraciones,
+# así los asientos de los agentes (guardados por uid) sobreviven a `proyecto.py aplicar`.
+_seen = {}
+def uid(t, c, r):
+    k = f"f-{t.lower()}-{c}-{r}"
+    n = _seen.get(k, 0); _seen[k] = n + 1
+    return k if n == 0 else f"{k}-{n}"
 F = []
-def add(t, c, r): F.append({"uid": uid(), "type": t, "col": c, "row": r})
+def add(t, c, r): F.append({"uid": uid(t, c, r), "type": t, "col": c, "row": r})
 def desk(c, r):
     add("DESK_FRONT", c, r); add("PC_FRONT_OFF", c + 1, r); add("CUSHIONED_BENCH", c + 1, r + 2)
 
@@ -134,6 +137,36 @@ def n_dirs(label):
 def ax(x0, W, dx):
     return x0 + dx if dx < 6 else x0 + W - (ROOM_W - dx)
 
+# Ancho en tiles de cada mueble (manifests del pack de Pixel Agents + nuestro pack
+# generado), para que nada asome fuera de la sala: un mueble de 2 tiles en la última
+# columna se salía a la pared (p. ej. las mesas del tema cafe en salas de 12).
+def _anchos_muebles():
+    import glob
+    out = {}
+    base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pixel-agents-src")
+    dirs = [os.path.join(base, "webview-ui", "public", "assets", "furniture"), os.path.join(base, "dist", "webview", "assets", "furniture")]
+    for d in dirs:
+        for m in glob.glob(os.path.join(d, "*", "manifest.json")):
+            try:
+                j = json.load(open(m))
+            except Exception:
+                continue
+            for it in (j.get("members") or [j]):
+                if it.get("id"):
+                    out.setdefault(it["id"], int(it.get("footprintW") or max(1, int(it.get("width", 16)) // 16)))
+    try:
+        ext = json.load(open(os.path.join(DATA, "assets", "manifest.json")))
+        for it in ext.get("items", ext.get("furniture", [])):
+            if it.get("id"):
+                out.setdefault(it["id"], int(it.get("footprintW") or max(1, int(it.get("width", 16)) // 16)))
+    except Exception:
+        pass
+    return out
+ANCHO = _anchos_muebles()
+def dentro(c, t, x0, W):
+    """Columna corregida para que el mueble t quepa en el piso [x0, x0+W)."""
+    return max(x0, min(c, x0 + W - ANCHO.get(t, 1)))
+
 for gy, fila in enumerate(filas):
     ws = anchos(len(fila))
     x0 = 1
@@ -172,8 +205,14 @@ for gy, fila in enumerate(filas):
                 desk(x0 + sh + dx, yf + 5)
             add("SOFA_LOUNGE", x0 + (W - 3) // 2, yw + 10)
         else:
+            # Los adornos que van encima de otro mueble (COFFEE sobre la mesa) comparten (dx, dy):
+            # se mueven junto con él si hubo que meterlo dentro de la sala.
+            pos = {}
             for t, dx, dy in tema["floor"]:
-                add(t, ax(x0, W, dx), yw + dy)
+                c = pos.get((dx, dy))
+                if c is None:
+                    c = pos[(dx, dy)] = dentro(ax(x0, W, dx), t, x0, W)
+                add(t, c, yw + dy)
             sx = x0 + (W - 3) // 2
             add("SOFA_LOUNGE", sx, yw + 8)    # sofá de descanso (filas 8-9; la 11 la tapa la pared de abajo)
             if W >= 20:  # salas anchas: plantas a los lados del sofá

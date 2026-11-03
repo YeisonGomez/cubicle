@@ -4,6 +4,7 @@ import { LANGS, locale, setLang, t, useT } from '../i18n/index.js';
 import { apiHeaders, prettyPath } from './FolderPicker.js';
 import { Button } from './ui/Button.js';
 import { Modal } from './ui/Modal.js';
+import { SkinPicker } from './SkinPicker.js';
 
 /** Casilla propia (la nativa se ve anticuada): cuadro con marca, color de acento al activarse. */
 function Check({ on, disabled, onChange, title }: { on: boolean; disabled?: boolean; onChange: (v: boolean) => void; title?: string }) {
@@ -152,6 +153,7 @@ export function OnboardingModal({ firstRun, onClose }: { firstRun: boolean; onCl
       <div className="ide-ui flex flex-col gap-10">
         <div className="flex items-center gap-10">
           <span className="t-desc">{firstRun ? t('onboarding.helpFirst') : t('onboarding.helpImport')}</span>
+          {firstRun && <SkinPicker compact />}
           <span className="ml-auto inline-flex items-center gap-4" title="Idioma / Language">
             {LANGS.map((l) => (
               <button

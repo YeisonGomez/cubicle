@@ -26,4 +26,9 @@ else
   echo "→ Ya tienes una statusline; para ver el uso de la cuenta en la oficina integra el bloque 'Oficina' de examples/statusline-command.sh."
 fi
 echo
-echo "Listo. Arranca con:  ./cubicle-start.sh   (imprime la URL con el token)"
+# Comando `cubicle` en el PATH (arranque en segundo plano, sin terminal abierta).
+BIN=""; for d in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin"; do [ -d "$d" ] && [ -w "$d" ] && { BIN="$d"; break; }; done
+if [ -n "$BIN" ]; then ln -sf "$PWD/cubicle" "$BIN/cubicle"; echo "→ Comando 'cubicle' instalado en $BIN."; else echo "→ Añade $PWD al PATH para usar el comando 'cubicle'."; fi
+echo
+echo "Listo. Arranca con:  cubicle install   (macOS: queda en segundo plano y arranca sola al iniciar sesión)"
+echo "                o:   cubicle start     (en esta terminal)   ·  cubicle open abre la oficina"

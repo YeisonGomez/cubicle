@@ -91,6 +91,13 @@ export function PrReviewPanel({ agent }: { agent: string }) {
     }
   };
 
+  // Más recientes primero: los PRs dentro de cada repo, y los repos por su PR más reciente
+  // (los repos sin PRs al final).
+  const sorted = repos
+    ? repos
+        .map((r) => ({ ...r, prs: [...r.prs].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)) }))
+        .sort((a, b) => (Date.parse(b.prs[0]?.updatedAt ?? '1970') || 0) - (Date.parse(a.prs[0]?.updatedAt ?? '1970') || 0))
+    : null;
   const total = repos?.reduce((a, r) => a + r.prs.length, 0) ?? 0;
   const decision = (d: string) => (d === 'APPROVED' ? t('prs.approved') : d === 'CHANGES_REQUESTED' ? t('prs.changes') : t('prs.pending'));
 
@@ -106,7 +113,7 @@ export function PrReviewPanel({ agent }: { agent: string }) {
       {msg && <div className="text-text-muted text-[12px]">{msg}</div>}
       {error && <div className="text-status-error">{error}</div>}
       {!repos && !error && <div className="text-text-muted">{t('common.loadingLower')}</div>}
-      {repos?.map((r) => (
+      {sorted?.map((r) => (
         <div key={r.path} className="flex flex-col gap-6">
           <div className="t-sub flex items-center gap-8">
             {r.name} <span className="opacity-60">{r.prs.length}</span>

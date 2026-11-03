@@ -8,7 +8,7 @@ export function Tip({ text, children }: { text: string; children: ReactNode }) {
     <span className="relative inline-flex" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
       {children}
       {show && (
-        <span className="absolute right-0 top-full mt-4 z-50 whitespace-nowrap bg-bg-dark border-2 border-border px-8 py-4 text-[12px] text-text shadow-[2px_2px_0px_#0a0a14]">
+        <span className="absolute right-0 top-full mt-4 z-50 whitespace-nowrap bg-bg-dark px-8 py-4 text-[12px] text-text shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
           {text}
         </span>
       )}

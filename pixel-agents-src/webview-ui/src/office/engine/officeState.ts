@@ -276,13 +276,20 @@ export class OfficeState {
           this.freeSeatInAreas(own, true) ??
           this.freeSeatInAreas(this.layout.areas?.map((a) => a.label) ?? [], true);
         if (pick) {
-          this.restingIds.add(ch.id);
+          this.setResting(ch.id, true);
           this.reassignSeat(ch.id, pick);
         }
       } else if (!idle && this.restingIds.has(ch.id)) {
         this.wakeUp(ch.id);
       }
     }
+  }
+
+  private setResting(id: number, on: boolean): void {
+    if (on) this.restingIds.add(id);
+    else this.restingIds.delete(id);
+    const ch = this.characters.get(id);
+    if (ch) ch.resting = on;
   }
 
   /** Manda a un agente al sofá de su sala (menú de la tarjeta). */
@@ -295,7 +302,7 @@ export class OfficeState {
     if (!pick) return;
     this.forcedRestAt.set(id, since);
     if (ch.directoryName) OfficeState.writeForcedRest(ch.directoryName, since);
-    this.restingIds.add(id);
+    this.setResting(id, true);
     this.reassignSeat(id, pick);
   }
 
@@ -305,7 +312,8 @@ export class OfficeState {
     this.wokenAt.set(id, Date.now());
     const name = this.characters.get(id)?.directoryName;
     if (name) OfficeState.writeForcedRest(name, null);
-    if (!this.restingIds.delete(id)) return;
+    if (!this.restingIds.has(id)) return;
+    this.setResting(id, false);
     this.reseatMisplaced();
   }
 
@@ -387,10 +395,15 @@ export class OfficeState {
       ch.seatId = null; // will be reassigned below
     }
 
-    // Second pass: assign remaining characters to free seats
+    // Second pass: assign remaining characters to free seats.
+    // Quien descansa va a un sofá de su sala (o de cualquiera), nunca a un escritorio:
+    // con el plano regenerado su sofá anterior ya no existe y antes acababa en una silla.
     for (const ch of this.characters.values()) {
       if (ch.seatId) continue;
-      const seatId = this.findFreeSeat(ch.directoryName);
+      const own = ch.directoryName ? (this.areaMappings[ch.directoryName] ?? []) : [];
+      const seatId = this.restingIds.has(ch.id)
+        ? (this.freeSeatInAreas(own, true) ?? this.freeSeatInAreas(layout.areas?.map((a) => a.label) ?? [], true) ?? this.findFreeSeat(ch.directoryName))
+        : this.findFreeSeat(ch.directoryName);
       if (seatId) {
         this.seats.get(seatId)!.assigned = true;
         ch.seatId = seatId;
@@ -1146,6 +1159,17 @@ export class OfficeState {
       ch.bubbleType = null;
       ch.bubbleTimer = 0;
     }
+  }
+
+  /** Skin de un personaje (tema Pokémon) o null para el muñeco clásico. */
+  setSkin(id: number, skin: { url: string; walk: string; name: string } | null): void {
+    const ch = this.characters.get(id);
+    if (ch) ch.skin = skin;
+  }
+
+  /** Personajes que te necesitan sin que los hayas mirado (saltan). */
+  setAttentionIds(ids: number[]): void {
+    for (const [id, ch] of this.characters) ch.attention = ids.includes(id);
   }
 
   showWaitingBubble(id: number, awaitingInput = false): void {

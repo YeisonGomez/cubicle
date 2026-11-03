@@ -416,3 +416,19 @@
 .ide-ui .t-desc { font-size: 12px; color: var(--color-text-muted); line-height: 1.4; }
 .ide-ui .t-label { font-size: 11px; color: var(--color-text-muted); }
 .ide-ui .t-value { font-size: 13px; color: var(--color-text); }
+
+/* Ficha de la barra que te necesita y aún no has abierto: latido suave del borde. */
+.card-unseen {
+  animation: card-unseen 2.2s ease-in-out infinite;
+}
+@keyframes card-unseen {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(246, 199, 68, 0);
+    border-color: transparent;
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(246, 199, 68, 0.35);
+    border-color: rgba(246, 199, 68, 0.9);
+  }
+}

@@ -10,20 +10,19 @@ import { DirectoryModal } from './components/DirectoryModal.js';
 import { EditActionBar } from './components/EditActionBar.js';
 import { IntroBubble } from './components/IntroBubble.js';
 import { MigrationNotice } from './components/MigrationNotice.js';
+import { syncLangToServer } from './i18n/index.js';
+import { loadSkin, useSkin } from './skin.js';
 import { OnboardingModal } from './components/OnboardingModal.js';
 import { authHeaders } from './components/panel/api.js';
 import { RoomDrawer } from './components/panel/RoomDrawer.js';
-import { UsageBadge } from './components/UsageBadge.js';
-import { useOnboardingGate } from './hooks/useOnboardingGate.js';
-import { useRestingAgents } from './hooks/useRestingAgents.js';
-import { useRoomPanel } from './hooks/useRoomPanel.js';
-
+import { ProjectInfoDrawer } from './components/ProjectInfoDrawer.js';
 /** Días sin actividad real tras los cuales un agente pasa a la zona de descanso. */
 import { SettingsModal } from './components/SettingsModal.js';
 import { TerminalDrawer } from './components/TerminalDrawer.js';
 import { Tooltip } from './components/Tooltip.js';
 import { Button } from './components/ui/Button.js';
 import { Modal } from './components/ui/Modal.js';
+import { UsageBadge } from './components/UsageBadge.js';
 import { VersionIndicator } from './components/VersionIndicator.js';
 import { ZoomControls } from './components/ZoomControls.js';
 import { OFFICE_CANVAS_TEST_ID } from './constants.js';
@@ -35,6 +34,9 @@ import { useExtensionMessages } from './hooks/useExtensionMessages.js';
 import { useIntroTour } from './hooks/useIntroTour.js';
 import { useIsMobile } from './hooks/useIsMobile.js';
 import { useKeyboardViewport } from './hooks/useKeyboardViewport.js';
+import { useOnboardingGate } from './hooks/useOnboardingGate.js';
+import { useRestingAgents } from './hooks/useRestingAgents.js';
+import { useRoomPanel } from './hooks/useRoomPanel.js';
 import { useTerminalDrawer } from './hooks/useTerminalDrawer.js';
 import { MobileShell } from './mobile/MobileShell.js';
 import { useMobileShell } from './mobile/useMobileShell.js';
@@ -357,6 +359,22 @@ function App() {
   const { onboarding, open: openOnboarding, close: closeOnboarding } = useOnboardingGate(layoutReady && !isMobile && terminalAvailable);
 
   // Panel izquierdo (IDE): sala o agente.
+  // El servidor necesita el idioma para los prompts automáticos.
+  useEffect(() => syncLangToServer(), []);
+  // Skin de personajes (clásico o Pokémon): cada agente recibe su sprite por nombre.
+  const skin = useSkin();
+  useEffect(() => {
+    void loadSkin();
+  }, []);
+  useEffect(() => {
+    const os = getOfficeState();
+    for (const [id, ch] of os.characters) {
+      const a = ch.directoryName ? skin.agents[ch.directoryName] : undefined;
+      os.setSkin(id, skin.theme === 'pokemon' && a ? { url: a.sprite, walk: a.walk, name: a.name } : null);
+    }
+  }, [skin, agents, terminalAgentIds]);
+  // Ficha de proyecto (sala), a la derecha: desde el nombre de la sala en la barra o su letrero.
+  const [projectRoom, setProjectRoom] = useState<string | null>(null);
   const { panel, panelColor, openAgentPanel, handleBoardClick, handleTvClick, close: closePanel, rename: renamePanel } = useRoomPanel(getOfficeState, areaMappings, layoutReady);
 
   const { reveal: revealTerminal } = terminalDrawer;
@@ -390,6 +408,7 @@ function App() {
   // show — and select its character so the office follows the click.
   const handleCardSelect = useCallback(
     (agentId: number) => {
+      setProjectRoom(null);
       transport.send({ type: 'focusAgent', id: agentId });
       getOfficeState().selectAndFollow(agentId);
       openAgentPanel(agentId);
@@ -398,6 +417,7 @@ function App() {
   );
   const handleTerminalSelect = useCallback(
     (agentId: number) => {
+      setProjectRoom(null);
       terminalDrawer.select(agentId);
       getOfficeState().selectAndFollow(agentId);
       openAgentPanel(agentId);
@@ -578,6 +598,7 @@ function App() {
         onClick={handleClick}
         onBoardClick={handleBoardClick}
         onTvClick={handleTvClick}
+        onSignClick={setProjectRoom}
         isEditMode={editor.isEditMode}
         editorState={editorState}
         onEditorTileAction={editor.handleEditorTileAction}
@@ -850,6 +871,8 @@ function App() {
               isResting={isResting}
               onRest={handleRest}
               onWake={handleWake}
+              onRoomInfo={setProjectRoom}
+              onUnseenChange={(ids) => getOfficeState().setAttentionIds(ids)}
             />
           )}
           <div className="flex-1 min-h-0 flex">
@@ -866,7 +889,23 @@ function App() {
               bar stands alone with every agent in the office, external sessions
               included — the at-a-glance "who needs attention" strip, with a
               click raising the agent's editor terminal where there is one. */}
+          {projectRoom && !(terminalAvailable && terminalDrawer.isOpen) && (
+            <ProjectInfoDrawer
+              room={projectRoom}
+              overlay={false}
+              statusOf={(n) => {
+                const id = (terminalAvailable ? terminalAgentIds : agents).find((i) => nameOf(i) === n);
+                return id === undefined ? null : terminalDrawer.statusFor(id);
+              }}
+              onOpenAgent={(n) => {
+                const id = (terminalAvailable ? terminalAgentIds : agents).find((i) => nameOf(i) === n);
+                if (id !== undefined) (terminalAvailable ? handleTerminalSelect : handleCardSelect)(id);
+              }}
+              onClose={() => setProjectRoom(null)}
+            />
+          )}
           {terminalAvailable ? (
+            <div className="relative h-full flex">
             <TerminalDrawer
               agentIds={terminalAgentIds}
               shownAgentId={terminalDrawer.shownAgentId}
@@ -884,6 +923,22 @@ function App() {
               groups={cardGroups}
               showCards={false}
             />
+            {projectRoom && terminalDrawer.isOpen && (
+              <ProjectInfoDrawer
+                room={projectRoom}
+                overlay
+                statusOf={(n) => {
+                  const id = terminalAgentIds.find((i) => nameOf(i) === n);
+                  return id === undefined ? null : terminalDrawer.statusFor(id);
+                }}
+                onOpenAgent={(n) => {
+                  const id = terminalAgentIds.find((i) => nameOf(i) === n);
+                  if (id !== undefined) handleTerminalSelect(id);
+                }}
+                onClose={() => setProjectRoom(null)}
+              />
+            )}
+            </div>
           ) : null}
           </div>
         </div>

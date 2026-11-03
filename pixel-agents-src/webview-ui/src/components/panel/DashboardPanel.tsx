@@ -1,9 +1,11 @@
+import { ExternalLink, RefreshCw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { locale, useT } from '../../i18n/index.js';
 import { prettyPath } from '../FolderPicker.js';
 import { Button } from '../ui/Button.js';
+import { IconButton } from '../ui/IconButton.js';
 import type { AgentInfo, DashboardRef } from './api.js';
 import { authHeaders, deleteDashboard, fetchInfo } from './api.js';
 
@@ -94,15 +96,17 @@ export function DashboardPanel({ agent, info, onInfo }: { agent: string; info: A
         <button className="text-accent-bright hover:underline underline-offset-4" onClick={() => setFull(true)} title={t('reports.fullscreenTitle')}>
           {t('reports.fullscreen')}
         </button>
-        <a className="hover:text-text" href={current.url} target="_blank" rel="noreferrer" title={t('reports.openTab')}>
-          ↗
-        </a>
-        <button className="hover:text-text" onClick={() => setBump((v) => v + 1)} title={t('reports.reload')}>
-          ↻
-        </button>
-        <button className="hover:text-status-error" onClick={() => setConfirmDel((v) => !v)} title={t('reports.delete')}>
-          ×
-        </button>
+        <span className="flex items-center gap-2 ml-4">
+          <IconButton label={t('reports.openTab')} onClick={() => window.open(current.url, '_blank', 'noopener')}>
+            <ExternalLink size={15} />
+          </IconButton>
+          <IconButton label={t('reports.reload')} onClick={() => setBump((v) => v + 1)}>
+            <RefreshCw size={15} />
+          </IconButton>
+          <IconButton label={t('reports.delete')} active={confirmDel} className="hover:text-status-error" onClick={() => setConfirmDel((v) => !v)}>
+            <Trash2 size={15} />
+          </IconButton>
+        </span>
       </div>
       {confirmDel && (
         <div className="flex items-center gap-8 px-10 py-6 border-y-2 border-border bg-bg-dark text-[12px]">

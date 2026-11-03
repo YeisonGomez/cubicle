@@ -10,10 +10,26 @@
 import * as path from 'path';
 
 import { readConfig } from '../configPersistence.js';
-import { setDirectoryNameResolver } from '../fileWatcher.js';
+import { setDirectoryNameResolver, setGlobalProjectDirFilter } from '../fileWatcher.js';
 import { claudeProvider } from '../providers/index.js';
 
+/** Nombre del Directorio registrado para una carpeta de proyecto de Claude (o undefined). */
+function nameForProjectDir(projectDir: string): string | undefined {
+  const dirs = readConfig().directories;
+  const target = path.basename(projectDir);
+  const owning = dirs
+    .map((d) => {
+      const sessionDir = claudeProvider.getSessionDirs?.(d.path)?.[0];
+      return { d, h: sessionDir ? path.basename(sessionDir) : '' };
+    })
+    .filter(({ h }) => h && (target === h || target.startsWith(h + '-')))
+    .sort((a, b) => b.h.length - a.h.length)[0];
+  return owning?.d.name;
+}
+
 export function installDirectoryNameResolver(): void {
+  // Solo se observan sesiones de carpetas registradas (o sus subcarpetas).
+  setGlobalProjectDirFilter((projectDir) => nameForProjectDir(projectDir) !== undefined);
   setDirectoryNameResolver(({ cwd, projectDir }) => {
     const dirs = readConfig().directories;
     if (dirs.length === 0) return undefined;

@@ -33,6 +33,7 @@ import {
   startExternalSessionScanning,
   startFileWatching,
   startStaleExternalAgentCheck,
+  isGlobalProjectDirAllowed,
 } from './fileWatcher.js';
 import type { HookEvent } from './hookEventHandler.js';
 import { HookEventHandler } from './hookEventHandler.js';
@@ -482,6 +483,8 @@ export class AgentRuntime {
 
     for (const p of persisted) {
       if (!p.isExternal) continue;
+      // Sesiones externas de carpetas no registradas (p. ej. corridas de un bot) tampoco se restauran.
+      if (p.jsonlFile && !isGlobalProjectDirAllowed(path.dirname(p.jsonlFile))) continue;
       // Background-spawn children (a leadAgentId but no teamName) are derived
       // state: the 1s scan re-materializes them from sidecars while their spawn
       // is live. Restoring them directly would resurrect immortal characters

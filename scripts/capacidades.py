@@ -43,6 +43,31 @@ tus habilidades (máx. 8), incluidas las que aún no son skills formales: "descr
 "detalle" = 2-4 frases en lenguaje natural explicando qué hace, cuándo se usa y cómo se pide.
 Empieza cada texto con mayúscula. Nombres cortos (máx. 30 caracteres)."""
 
+PREGUNTA_EN = """Cubicle (pixel agents): register your external capabilities. Reply ONLY by running this command
+with the JSON filled in (no extra text), based on your CLAUDE.md, your skills, your MCP servers and what
+you can actually use in this project:
+
+python3 {script} set "{nombre}" <<'JSON'
+{{
+  "recursos": [ {{"nombre": "MongoDB production", "tipo": "base de datos", "detalle": "read access via mongosh"}} ],
+  "mcp": [ "Sentry", "Customer.io" ],
+  "apps": [ "Chrome", "Mail" ],
+  "skills": [ {{"nombre": "Environment health check", "descripcion": "Verifies the deploy in dev, sandbox and prod",
+               "detalle": "Checks that the deployed build is the branch HEAD, that the frontend loads without errors and that Sentry and the backend respond. Triggered with 'check sandbox health'."}} ]
+}}
+JSON
+
+Rules: "recursos" = ONLY what you query OUTSIDE the project: databases (one per environment),
+external APIs and services (Sila, Customer.io, DocuSign, Garmin, Wompi…), cloud (AWS, GCP), email.
+Do NOT include local folders, iCloud/Drive, repos or the office itself. "tipo" ∈ {tipos} (keep these Spanish keys as-is). "mcp" = MCP servers
+you use (short name). "apps" = applications (Mail, Chrome, Notion, Slack, Terminal, Excel...). "skills" =
+your skills (max 8), including ones that are not formal skills yet: "descripcion" = one short sentence;
+"detalle" = 2-4 sentences in plain English explaining what it does, when it is used and how to ask for it.
+Write every text in English, starting with a capital letter. Short names (max 30 characters)."""
+
+def pregunta_tpl():
+    return PREGUNTA_EN if os.environ.get("OFICINA_LANG", "en") == "en" else PREGUNTA
+
 def load():
     return json.load(open(DB)) if os.path.exists(DB) else {}
 def save(d):
@@ -90,7 +115,7 @@ def main(argv):
         print(__doc__); return 0
     cmd = argv[1]
     if cmd == "pregunta":
-        print(PREGUNTA.format(nombre=argv[2], tipos=", ".join(TIPOS), script=os.path.join(OFI, "capacidades.py"))); return 0
+        print(pregunta_tpl().format(nombre=argv[2], tipos=", ".join(TIPOS), script=os.path.join(OFI, "capacidades.py"))); return 0
     if cmd == "set":
         nombre = argv[2]
         raw = json.loads(sys.stdin.read())

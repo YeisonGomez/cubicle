@@ -1,8 +1,9 @@
+import { PieChart } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { locale, useT } from '../i18n/index.js';
-import { IconPie } from './icons.js';
 import { TokenUsageModal } from './TokenUsageModal.js';
+import { IconButton } from './ui/IconButton.js';
 
 interface Usage {
   five_hour: { used_percentage?: number; resets_at?: number } | null;
@@ -79,13 +80,9 @@ export function UsageBadge({ working }: { working: number }) {
           {t('usage.working', { n: working })}
         </span>
       )}
-      <button
-        className={`flex items-center justify-center size-24 border-2 ${showTokens ? 'border-accent text-text' : 'border-border text-text-muted hover:text-text'}`}
-        onClick={() => setShowTokens(true)}
-        title={t('usage.tokensTitle')}
-      >
-        <IconPie size={14} />
-      </button>
+      <IconButton label={t('usage.tokensTitle')} size="sm" active={showTokens} onClick={() => setShowTokens(true)}>
+        <PieChart size={14} />
+      </IconButton>
       {showTokens && <TokenUsageModal onClose={() => setShowTokens(false)} />}
     </div>
   );

@@ -105,8 +105,9 @@ export function updateCharacter(
         ch.frameTimer -= TYPE_FRAME_DURATION_SEC;
         ch.frame = (ch.frame + 1) % 2;
       }
-      // If no longer active, stand up and start wandering (after seatTimer expires)
-      if (!ch.isActive) {
+      // If no longer active, stand up and start wandering (after seatTimer expires).
+      // Solo pasea quien está Libre: trabajando se queda en su puesto y descansando en el sofá.
+      if (!ch.isActive && !ch.resting) {
         if (ch.seatTimer > 0) {
           ch.seatTimer -= dt;
           break;
@@ -126,8 +127,8 @@ export function updateCharacter(
       // No idle animation — static pose
       ch.frame = 0;
       if (ch.seatTimer < 0) ch.seatTimer = 0; // clear turn-end sentinel
-      // If became active, pathfind to seat
-      if (ch.isActive) {
+      // If became active (or resting: al sofá), pathfind to seat
+      if (ch.isActive || ch.resting) {
         if (!ch.seatId) {
           // No seat assigned — type in place
           ch.state = CharacterState.TYPE;
@@ -291,7 +292,7 @@ export function updateCharacter(
       }
 
       // If became active while wandering, repath to seat
-      if (ch.isActive && ch.seatId) {
+      if ((ch.isActive || ch.resting) && ch.seatId) {
         const seat = seats.get(ch.seatId);
         if (seat) {
           const lastStep = ch.path[ch.path.length - 1];
@@ -320,6 +321,7 @@ export function updateCharacter(
 export function getCharacterSprite(ch: Character, sprites: CharacterSprites): SpriteData {
   switch (ch.state) {
     case CharacterState.TYPE:
+      if (ch.resting) return sprites.walk[ch.dir][1]; // en el sofá: quieto, sin teclear
       if (isReadingTool(ch.currentTool)) {
         return sprites.reading[ch.dir][ch.frame % 2];
       }

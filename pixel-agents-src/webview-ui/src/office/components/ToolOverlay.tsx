@@ -6,16 +6,6 @@ import {
   BUBBLE_SITTING_OFFSET_PX,
   BUBBLE_VERTICAL_OFFSET_PX,
   CHARACTER_SITTING_OFFSET_PX,
-  CONTEXT_CRITICAL_THRESHOLD,
-  CONTEXT_DANGER_THRESHOLD,
-  CONTEXT_GAUGE_BG,
-  CONTEXT_GAUGE_COLOR_CRITICAL,
-  CONTEXT_GAUGE_COLOR_DANGER,
-  CONTEXT_GAUGE_COLOR_OK,
-  CONTEXT_GAUGE_COLOR_WARN,
-  CONTEXT_GAUGE_HEIGHT_PX,
-  CONTEXT_GAUGE_WIDTH_PX,
-  CONTEXT_WARN_THRESHOLD,
   OVERLAY_BUBBLE_Z_INDEX,
   OVERLAY_LABEL_SELECTED_Z_INDEX,
   OVERLAY_LABEL_Z_INDEX,
@@ -87,13 +77,6 @@ function getActivityText(
   }
 
   return 'Idle';
-}
-
-function getFuelColor(ratio: number): string {
-  if (ratio >= CONTEXT_CRITICAL_THRESHOLD) return CONTEXT_GAUGE_COLOR_CRITICAL;
-  if (ratio >= CONTEXT_DANGER_THRESHOLD) return CONTEXT_GAUGE_COLOR_DANGER;
-  if (ratio >= CONTEXT_WARN_THRESHOLD) return CONTEXT_GAUGE_COLOR_WARN;
-  return CONTEXT_GAUGE_COLOR_OK;
 }
 
 /** A speech-bubble sprite blitted into a DOM canvas. Bubbles live in the DOM
@@ -216,7 +199,10 @@ export function ToolOverlay({
         // Position above character
         const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0;
         const screenX = project.toScreenX(ch.x);
-        const screenY = project.toScreenY(ch.y + sittingOffset - TOOL_OVERLAY_VERTICAL_OFFSET);
+        // Más arriba de la cabeza: antes la etiqueta tapaba al personaje. Con skin Pokémon
+        // (sprite más alto que el muñeco) sube un poco más; el sprite ya lleva margen propio.
+        const lift = ch.skin ? 4 : 4;
+        const screenY = project.toScreenY(ch.y + sittingOffset - TOOL_OVERLAY_VERTICAL_OFFSET - lift);
 
         // A "Done" agent (finished turn: waiting bubble without awaitingInput)
         // shows ONLY its floating green checkmark bubble, never the label panel
@@ -283,18 +269,22 @@ export function ToolOverlay({
         if (hasPermission || hasWaiting) {
           dotColor = 'var(--color-status-permission)';
         } else if (isActive && hasActiveTools) {
-          dotColor = 'var(--color-status-active)';
+          dotColor = 'var(--color-accent-bright)';
         }
+        // Color del estado para la etiqueta: borde izquierdo y texto de actividad.
+        // Te necesita (salta) y permiso → amarillo; trabajando → azul; libre → gris.
+        // Mismos colores que la ficha de la barra: trabajando = acento, te necesita = amarillo, libre = gris.
+        // "Trabajando" exige herramientas en curso: isActive solo puede quedar en true sin actividad real.
+        const needsYou = ch.attention || hasPermission || hasWaiting;
+        const working = isActive && hasActiveTools;
+        const statusColor = needsYou ? 'var(--color-status-permission)' : working ? 'var(--color-accent-bright)' : 'var(--color-border)';
+        const activityColor = needsYou ? 'var(--color-status-permission)' : working ? 'var(--color-accent-bright)' : 'var(--color-text-muted)';
 
         // Team info
         const teamRoleLabel = ch.isTeamLead ? 'LEAD' : ch.agentName || null;
         const hasExtraLines = !!(ch.directoryName || teamRoleLabel);
 
-        // Context gauge. Every agent gets one — lead, teammate, adopted,
-        // headless — as soon as it has taken a turn. Sub-agents never do: they
-        // have no session of their own, so contextTokens stays 0.
-        const contextRatio = ch.contextTokens / ch.maxContextTokens;
-        const showContextGauge = !isSub && ch.contextTokens > 0;
+        // Sin medidor de contexto bajo la etiqueta (Cubicle): no aportaba y ensuciaba la vista.
 
         return (
           <Fragment key={id}>
@@ -305,13 +295,14 @@ export function ToolOverlay({
                 left: screenX,
                 top: screenY - (hasExtraLines ? 34 : 28),
                 pointerEvents: isSelected ? 'auto' : 'none',
-                opacity: alwaysShowOverlay && !isSelected && !isHovered ? (isSub ? 0.5 : 0.75) : 1,
+                // Opaca siempre: con transparencia no se leía sobre pisos con dibujo.
+                opacity: alwaysShowOverlay && !isSelected && !isHovered && isSub ? 0.8 : 1,
                 zIndex: isSelected ? OVERLAY_LABEL_SELECTED_Z_INDEX : OVERLAY_LABEL_Z_INDEX,
               }}
               data-testid="agent-overlay"
               data-agent-id={id}
             >
-              <div className="flex items-center border-border px-8 pt-2 pb-4 gap-5 pixel-panel whitespace-nowrap max-w-2xs">
+              <div className="flex items-center px-8 pt-2 pb-4 gap-5 pixel-panel whitespace-nowrap max-w-2xs" style={{ background: 'var(--color-bg-dark)', borderColor: statusColor, borderLeftWidth: 4 }}>
                 {dotColor && (
                   <span
                     className={`w-6 h-6 rounded-full shrink-0 ${isActive && !hasPermission && !hasWaiting ? 'pixel-pulse' : ''}`}
@@ -334,13 +325,15 @@ export function ToolOverlay({
                   {ch.directoryName && !isSub && (
                     <span className="overflow-hidden text-ellipsis block leading-none font-bold" style={{ fontSize: '22px' }}>
                       {ch.directoryName}
+                      {ch.skin && <span className="font-normal text-text-muted"> · {ch.skin.name}</span>}
                     </span>
                   )}
                   <span
-                    className={`overflow-hidden text-ellipsis block leading-none ${isSub ? '' : 'text-text-muted'}`}
+                    className="overflow-hidden text-ellipsis block leading-none"
                     style={{
                       fontSize: isSub ? '20px' : '18px',
                       fontStyle: isSub ? 'italic' : undefined,
+                      color: isSub ? undefined : activityColor,
                     }}
                   >
                     {activityText}
@@ -367,27 +360,6 @@ export function ToolOverlay({
                   </>
                 )}
               </div>
-              {showContextGauge && (
-                <div
-                  style={{
-                    width: CONTEXT_GAUGE_WIDTH_PX,
-                    height: CONTEXT_GAUGE_HEIGHT_PX,
-                    background: CONTEXT_GAUGE_BG,
-                    marginTop: 2,
-                  }}
-                  title={`${Math.round(contextRatio * 100)}% context used (${(ch.contextTokens / 1000).toFixed(0)}k of ${(ch.maxContextTokens / 1000).toFixed(0)}k tokens)`}
-                  data-testid="context-gauge"
-                  data-context-pct={Math.round(contextRatio * 100)}
-                >
-                  <div
-                    style={{
-                      width: `${Math.min(contextRatio * 100, 100)}%`,
-                      height: '100%',
-                      background: getFuelColor(contextRatio),
-                    }}
-                  />
-                </div>
-              )}
             </div>
           </Fragment>
         );

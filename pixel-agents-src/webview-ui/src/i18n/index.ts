@@ -36,9 +36,23 @@ export function getLang(): Lang {
   return current;
 }
 
+/** Avisa al servidor del idioma para que los prompts automáticos (capacidades, ficha, PRs) salgan en él. */
+export function syncLangToServer(): void {
+  import('../transport/serverToken.js')
+    .then(({ serverToken }) =>
+      fetch('./api/lang', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...(serverToken ? { Authorization: `Bearer ${serverToken}` } : {}) },
+        body: JSON.stringify({ lang: current }),
+      }),
+    )
+    .catch(() => undefined);
+}
+
 export function setLang(l: Lang): void {
   if (l === current) return;
   current = l;
+  syncLangToServer();
   try {
     localStorage.setItem(LANG_KEY, l);
   } catch {

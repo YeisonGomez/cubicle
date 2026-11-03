@@ -15,7 +15,7 @@ import {
   PET_THUMB_ZOOM,
 } from '../../constants.js';
 import { getColorizedSprite } from '../colorize.js';
-import { getColorizedFloorSprite, getFloorPatternCount, hasFloorSprites } from '../floorTiles.js';
+import { FLOOR_PATTERNS_FORBIDDEN, getColorizedFloorSprite, getFloorPatternCount, hasFloorSprites } from '../floorTiles.js';
 import type { FurnitureCategory, LoadedAssetData } from '../layout/furnitureCatalog.js';
 import {
   buildDynamicCatalog,
@@ -169,7 +169,9 @@ export function EditorToolbar({
 
   const patternCount = getFloorPatternCount();
   // Wall is TileType 0, floor patterns are 1..patternCount
-  const floorPatterns = Array.from({ length: patternCount }, (_, i) => i + 1);
+  // Se excluyen los pisos de líneas blancas (2, 5) y de ajedrez (8, 9): su contraste
+  // tapa las etiquetas de los personajes. Misma lista que PISOS_OK en scripts/proyecto.py.
+  const floorPatterns = Array.from({ length: patternCount }, (_, i) => i + 1).filter((p) => !FLOOR_PATTERNS_FORBIDDEN.includes(p));
 
   const thumbSize = 42; // 2x for items
 

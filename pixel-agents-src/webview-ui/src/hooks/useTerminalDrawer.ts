@@ -1,6 +1,8 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+const TERMINAL_WIDTH_KEY = 'pixel-agents.terminalWidth';
+
 import type { AgentActivity, AgentAppearance, TabStatus } from '../components/AgentCard.js';
 import {
   TERMINAL_DRAWER_DEFAULT_WIDTH_PX,
@@ -88,7 +90,16 @@ export function useTerminalDrawer({
   // The width the user asked for; what renders is that clamped to the
   // viewport, re-derived on every window resize so a window that narrows
   // while the drawer is open never pushes the office (and its cards) out.
-  const [preferredWidthPx, setPreferredWidthPx] = useState(TERMINAL_DRAWER_DEFAULT_WIDTH_PX);
+  // Ancho preferido guardado (localStorage): al recargar vuelve al último que dejó el usuario.
+  const [preferredWidthPx, setPreferredWidthPx] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem(TERMINAL_WIDTH_KEY));
+      if (Number.isFinite(v) && v > 0) return v;
+    } catch {
+      /* sin almacenamiento */
+    }
+    return TERMINAL_DRAWER_DEFAULT_WIDTH_PX;
+  });
   const [viewportPx, setViewportPx] = useState(() => window.innerWidth);
   useEffect(() => {
     const onResize = () => setViewportPx(window.innerWidth);
@@ -156,6 +167,14 @@ export function useTerminalDrawer({
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         document.body.style.userSelect = '';
+        setPreferredWidthPx((w) => {
+          try {
+            localStorage.setItem(TERMINAL_WIDTH_KEY, String(w));
+          } catch {
+            /* sin almacenamiento */
+          }
+          return w;
+        });
       };
       // Suppress text selection while dragging over the terminal/office.
       document.body.style.userSelect = 'none';
@@ -183,7 +202,7 @@ export function useTerminalDrawer({
       const tools = agentTools[id];
       if (tools?.some((t) => t.permissionWait && !t.done)) return 'attention';
       if (tools?.some((t) => !t.done)) return 'working';
-      if (agentAwaitingInput[id]) return 'attention';
+      if (agentAwaitingInput[id]) return 'question';
       if (agentStatuses[id] === 'waiting') return 'idle';
       return 'working';
     },

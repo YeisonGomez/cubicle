@@ -46,6 +46,9 @@ export function hasFloorSprites(): boolean {
 }
 
 /** Get count of available floor patterns (at least 1 for the default solid tile) */
+/** Pisos que no se ofrecen en el editor ni asigna proyecto.py: líneas blancas (2, 5) y ajedrez (8, 9) tapan las etiquetas. */
+export const FLOOR_PATTERNS_FORBIDDEN = [2, 5, 8, 9];
+
 export function getFloorPatternCount(): number {
   return floorSprites.length > 0 ? floorSprites.length : 1;
 }

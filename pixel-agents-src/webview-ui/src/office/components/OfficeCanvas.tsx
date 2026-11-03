@@ -44,6 +44,8 @@ interface OfficeCanvasProps {
   onBoardClick?: (areaLabel: string) => void;
   /** Clic sobre el televisor (TV_WALL): abre los Reportes de esa sala. */
   onTvClick?: (areaLabel: string) => void;
+  /** Clic sobre el letrero de una sala (SIGN_*): abre la ficha del proyecto. */
+  onSignClick?: (areaLabel: string) => void;
   isEditMode: boolean;
   editorState: EditorState;
   onEditorTileAction: (col: number, row: number) => void;
@@ -88,6 +90,7 @@ export function OfficeCanvas({
   onClick,
   onBoardClick,
   onTvClick,
+  onSignClick,
   isEditMode,
   editorState,
   onEditorTileAction,
@@ -453,7 +456,7 @@ export function OfficeCanvas({
       }
       if (hitId === null && petId === null && tile && onBoardClick) {
         const fh = furnitureAt(officeState.getLayout(), tile.col, tile.row);
-        if ((fh?.type === NOTE_BOARD_TYPE || fh?.type === TV_TYPE) && canvas) canvas.style.cursor = 'pointer';
+        if ((fh?.type === NOTE_BOARD_TYPE || fh?.type === TV_TYPE || fh?.type.startsWith('SIGN_')) && canvas) canvas.style.cursor = 'pointer';
       }
       officeState.hoveredAgentId = hitId;
     },
@@ -676,9 +679,11 @@ export function OfficeCanvas({
         const btile = screenToTile(clientX, clientY);
         if (btile) {
           const fh = furnitureAt(officeState.getLayout(), btile.col, btile.row);
-          if (fh?.type === NOTE_BOARD_TYPE || fh?.type === TV_TYPE) {
+          if (fh?.type === NOTE_BOARD_TYPE || fh?.type === TV_TYPE || fh?.type.startsWith('SIGN_')) {
             const area = areaBelow(officeState.getLayout(), btile.col, btile.row) ?? areaBelow(officeState.getLayout(), btile.col + 1, btile.row);
-            if (fh.type === TV_TYPE && onTvClick) onTvClick(area ?? 'General');
+            if (fh.type.startsWith('SIGN_')) {
+              if (onSignClick) onSignClick(area ?? 'General');
+            } else if (fh.type === TV_TYPE && onTvClick) onTvClick(area ?? 'General');
             else onBoardClick(area ?? 'General');
             return;
           }

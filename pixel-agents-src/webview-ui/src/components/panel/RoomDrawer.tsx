@@ -1,7 +1,9 @@
+import { Activity, Home, PanelLeftClose, SlidersHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useT } from '../../i18n/index.js';
-import { IconActivity, IconChevronLeft, IconClaude, IconGear, IconHome } from '../icons.js';
+import { IconClaude } from '../icons.js';
+import { IconButton } from '../ui/IconButton.js';
 import { ActivityPanel } from './ActivityPanel.js';
 import { AgentSettingsForm } from './AgentSettingsForm.js';
 import type { AgentInfo, PanelTarget } from './api.js';
@@ -9,11 +11,10 @@ import { fetchInfo } from './api.js';
 import { CapabilitiesPanel } from './CapabilitiesPanel.js';
 import { ChangesPanel } from './ChangesPanel.js';
 import { DashboardPanel } from './DashboardPanel.js';
-import { PrReviewPanel } from './PrReviewPanel.js';
 import { NotesPanel } from './NotesPanel.js';
 import type { RoomTab } from './panelTabs.js';
 import { HOME_TABS, homeTab, readPrefTab, resolveTab, writePrefTab } from './panelTabs.js';
-import { Tip } from './Tip.js';
+import { PrReviewPanel } from './PrReviewPanel.js';
 import { usePanelWidth } from './usePanelWidth.js';
 
 export type { PanelTarget } from './api.js';
@@ -110,9 +111,6 @@ function usePanelTab(target: PanelTarget | null, info: AgentInfo | null, isCode:
   return { tab, setTab };
 }
 
-const headerBtn = (active: boolean) =>
-  `flex items-center justify-center size-28 border-2 ${active ? 'border-accent text-text' : 'border-border text-text-muted hover:text-text'}`;
-
 function BranchIcon() {
   return (
     <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
@@ -200,33 +198,23 @@ export function RoomDrawer({ target, color, onClose, onRenamed, onRenaming }: Ro
             {subtitleNode ?? subtitle}
           </div>
         </div>
-        <Tip text={t('panel.home')}>
-          <button className={headerBtn(HOME_TABS.includes(tab))} onClick={() => setTab(home)}>
-            <IconHome />
-          </button>
-        </Tip>
-        <Tip text={agentName ? t('panel.activityAgent') : t('panel.activityRoom')}>
-          <button className={headerBtn(tab === 'actividad')} onClick={() => toggle('actividad')}>
-            <IconActivity />
-          </button>
-        </Tip>
-        <Tip text={agentName ? t('panel.capsAgent') : t('panel.capsRoom')}>
-          <button className={headerBtn(tab === 'capacidades')} onClick={() => toggle('capacidades')}>
-            <IconClaude />
-          </button>
-        </Tip>
+        <IconButton label={t('panel.home')} active={HOME_TABS.includes(tab)} onClick={() => setTab(home)}>
+          <Home size={16} />
+        </IconButton>
+        <IconButton label={agentName ? t('panel.activityAgent') : t('panel.activityRoom')} active={tab === 'actividad'} onClick={() => toggle('actividad')}>
+          <Activity size={16} />
+        </IconButton>
+        <IconButton label={agentName ? t('panel.capsAgent') : t('panel.capsRoom')} active={tab === 'capacidades'} onClick={() => toggle('capacidades')}>
+          <IconClaude />
+        </IconButton>
         {agentName && (
-          <Tip text={t('panel.settings')}>
-            <button className={headerBtn(tab === 'ajustes')} onClick={() => toggle('ajustes')}>
-              <IconGear />
-            </button>
-          </Tip>
+          <IconButton label={t('panel.settings')} active={tab === 'ajustes'} onClick={() => toggle('ajustes')}>
+            <SlidersHorizontal size={16} />
+          </IconButton>
         )}
-        <Tip text={t('panel.close')}>
-          <button className={headerBtn(false)} onClick={onClose}>
-            <IconChevronLeft />
-          </button>
-        </Tip>
+        <IconButton label={t('panel.close')} onClick={onClose}>
+          <PanelLeftClose size={16} />
+        </IconButton>
       </div>
 
       {HOME_TABS.includes(tab) && (

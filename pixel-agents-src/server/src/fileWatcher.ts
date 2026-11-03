@@ -604,6 +604,19 @@ export type DirectoryNameResolver = (ctx: {
 let directoryNameResolver: DirectoryNameResolver | null = null;
 
 /** Register the host's cwd/projectDir → Directory name resolver (VS Code only). */
+/** Con "Watch All Sessions", decide qué carpetas de proyecto de Claude se observan.
+ *  Sin filtro (upstream) se observan todas; la oficina instala uno que deja solo
+ *  las de los Directorios registrados, para que sesiones sueltas (bots, pruebas)
+ *  no aparezcan como personajes en cualquier sala. */
+let globalProjectDirFilter: ((projectDir: string) => boolean) | null = null;
+export function setGlobalProjectDirFilter(filter: ((projectDir: string) => boolean) | null): void {
+  globalProjectDirFilter = filter;
+}
+/** ¿Se observa esta carpeta de proyecto? (sin filtro instalado, siempre sí). */
+export function isGlobalProjectDirAllowed(projectDir: string): boolean {
+  return globalProjectDirFilter ? globalProjectDirFilter(projectDir) : true;
+}
+
 export function setDirectoryNameResolver(resolver: DirectoryNameResolver): void {
   directoryNameResolver = resolver;
 }
@@ -1426,6 +1439,7 @@ function scanGlobalProjectDirs(
   for (const dirPath of projectDirs) {
     // Skip directories already tracked by workspace scanning
     if (isTrackedProjectDir(dirPath)) continue;
+    if (globalProjectDirFilter && !globalProjectDirFilter(dirPath)) continue;
 
     let files: string[];
     try {

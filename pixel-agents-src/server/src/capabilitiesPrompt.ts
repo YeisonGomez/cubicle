@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { capabilitiesFile, scriptsDir } from './officePaths.js';
+import { langEnv } from './office/language.js';
 
 function declared(): Record<string, unknown> {
   try {
@@ -42,7 +43,7 @@ export function capabilitiesPromptFor(name: string): string | null {
   const cli = path.join(scriptsDir(), 'capacidades.py');
   if (!fs.existsSync(cli)) return null;
   try {
-    const out = execFileSync('python3', [cli, 'pregunta', name], { encoding: 'utf8', timeout: 5000 });
+    const out = execFileSync('python3', [cli, 'pregunta', name], { encoding: 'utf8', timeout: 5000, env: langEnv() });
     const text = out.trim();
     return text ? text : null;
   } catch (e) {

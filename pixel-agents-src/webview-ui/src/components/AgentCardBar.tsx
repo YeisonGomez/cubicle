@@ -1,5 +1,7 @@
 import type { DragEvent } from 'react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { notify } from '../notifications.js';
 
 import { TERMINAL_SIDEBAR_WIDTH_PX } from '../constants.js';
 import { useT } from '../i18n/index.js';
@@ -40,6 +42,10 @@ interface AgentCardBarProps {
   isResting?: (agentId: number) => boolean;
   onRest?: (agentId: number) => void;
   onWake?: (agentId: number) => void;
+  /** Clic en el nombre de una sala: abre su ficha de proyecto. */
+  onRoomInfo?: (label: string) => void;
+  /** Agentes que te necesitan y no has mirado (cambia cuando cambia): la oficina los hace saltar. */
+  onUnseenChange?: (ids: number[]) => void;
 }
 
 const UNGROUPED = '__sin_sala__';
@@ -105,6 +111,8 @@ export function AgentCardBar({
   isResting,
   onRest,
   onWake,
+  onRoomInfo,
+  onUnseenChange,
 }: AgentCardBarProps) {
   const { t, tn } = useT();
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(readJson<string[]>(COLLAPSED_KEY, [])));
@@ -114,6 +122,64 @@ export function AgentCardBar({
   const [drag, setDrag] = useState<{ id: number; group: string; ids: number[] } | null>(null);
   const [groupDrag, setGroupDrag] = useState<{ key: string; keys: string[] } | null>(null);
   const cardRefs = useRef(new Map<number, HTMLDivElement>());
+  // "Te necesita" sin ver: un agente que pide permiso, te pregunta algo o TERMINÓ
+  // un turno mientras no mirabas su terminal. Late en la barra (y avisa con una
+  // notificación del navegador) hasta que abres su terminal o vuelve a trabajar.
+  const [pending, setPending] = useState<Set<number>>(new Set());
+  const prevStatus = useRef(new Map<number, TabStatus | null>());
+  // Ya revisados en este episodio de reposo: Claude vuelve a avisar (idle_prompt)
+  // cada cierto tiempo mientras la sesión sigue parada en el prompt, y eso NO debe
+  // volver a marcarla como pendiente. Se olvida cuando el agente vuelve a trabajar.
+  const seenRef = useRef(new Set<number>());
+  // Mirar al agente cuenta como revisarlo: su terminal abierta o su personaje elegido.
+  const lookedAt = activeAgentId ?? focusedAgentId;
+  const markSeen = useCallback((id: number) => {
+    seenRef.current.add(id);
+    setPending((p) => (p.has(id) ? new Set([...p].filter((x) => x !== id)) : p));
+  }, []);
+  const statusKey = agentIds.map((id) => `${id}:${statusFor(id)}`).join('|');
+  useEffect(() => {
+    const finished: number[] = [];
+    setPending((p) => {
+      const next = new Set(p);
+      for (const id of agentIds) {
+        const now = statusFor(id);
+        const was = prevStatus.current.get(id) ?? null;
+        prevStatus.current.set(id, now);
+        if (now === 'working') {
+          next.delete(id); // volvió a trabajar: se olvida y empieza un episodio nuevo
+          seenRef.current.delete(id);
+        }
+        if (was === null) continue; // primera observación (carga de la página): nada pendiente
+        const asks = now === 'attention' || now === 'question';
+        const justFinished = was === 'working' && now === 'idle';
+        if ((asks || justFinished) && id !== lookedAt && !seenRef.current.has(id) && !next.has(id)) {
+          next.add(id);
+          finished.push(id);
+        }
+      }
+      for (const id of [...next]) if (!agentIds.includes(id)) next.delete(id);
+      return next.size === p.size && [...next].every((x) => p.has(x)) ? p : next;
+    });
+    if (finished.length > 0) notify(finished.map((id) => nameOf?.(id) ?? `Agent ${id}`), statusFor(finished[0]) === 'idle' ? t('notify.finished') : t('notify.needs'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusKey]);
+  useEffect(() => {
+    if (lookedAt !== null && lookedAt !== undefined) markSeen(lookedAt);
+  }, [lookedAt, markSeen]);
+  const unseen = (id: number) => pending.has(id) && id !== lookedAt;
+  const unseenKey = [...pending].filter((id) => id !== lookedAt).sort((a, b) => a - b).join(',');
+  useEffect(() => {
+    onUnseenChange?.(unseenKey ? unseenKey.split(',').map(Number) : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unseenKey]);
+  // "Te necesita" (idle_prompt: la sesión espera en el prompt) solo mientras no lo
+  // hayas visto; una vez abierta su terminal vuelve a mostrarse Libre. El permiso
+  // pendiente (attention) sí se mantiene, porque bloquea de verdad.
+  const shownStatus = (id: number): TabStatus | null => {
+    const s = statusFor(id);
+    return s === 'question' && !unseen(id) ? 'idle' : s;
+  };
   const sectionRefs = useRef(new Map<string, HTMLDivElement>());
 
   const toggle = useCallback((key: string) => {
@@ -257,7 +323,7 @@ export function AgentCardBar({
         {sections.map((s) => {
           const isCollapsed = collapsed.has(s.key);
           const isPinnedSection = s.key === PINNED;
-          const busy = s.ids.filter((id) => statusFor(id) === 'working' || statusFor(id) === 'attention').length;
+          const busy = s.ids.filter((id) => ['working', 'attention', 'question'].includes(shownStatus(id) ?? '')).length;
           const ordered = isPinnedSection ? s.ids : applySavedOrder(s.ids, order[s.key], name);
           const ids = drag && drag.group === s.key ? drag.ids : ordered;
           return (
@@ -289,11 +355,17 @@ export function AgentCardBar({
                   )}
                   <button
                     className="flex items-center gap-6 text-left text-[11px] uppercase tracking-wider text-text-muted hover:text-text"
-                    title={t('bar.toggle', { room: s.label, action: isCollapsed ? t('bar.show') : t('bar.hide') })}
-                    onClick={() => toggle(s.key)}
+                    title={!isPinnedSection && onRoomInfo ? t('bar.info', { room: s.label }) : s.label}
+                    onClick={() => (!isPinnedSection && onRoomInfo ? onRoomInfo(s.key) : toggle(s.key))}
                   >
                     {s.color && <span className="inline-block w-8 h-8" style={{ background: s.color }} />}
                     <span className="font-semibold">{s.label}</span>
+                  </button>
+                  <button
+                    className="flex items-center text-text-muted hover:text-text px-2"
+                    title={t('bar.toggle', { room: s.label, action: isCollapsed ? t('bar.show') : t('bar.hide') })}
+                    onClick={() => toggle(s.key)}
+                  >
                     <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden className={isCollapsed ? '' : 'rotate-90'}>
                       <path d="M3 1.5 7 5l-4 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
@@ -326,13 +398,17 @@ export function AgentCardBar({
                         agentId={agentId}
                         variant={cardVariant(agentId, { activeId: activeAgentId, focusedId: focusedAgentId })}
                         appearance={getAppearance(agentId)}
-                        status={statusFor(agentId)}
+                        status={shownStatus(agentId)}
                         name={nameOf?.(agentId)}
-                        onSelect={onSelect}
+                        onSelect={(id) => {
+                          markSeen(id);
+                          onSelect(id);
+                        }}
                         onClose={onClose}
                         resting={isResting?.(agentId) ?? false}
                         onRest={onRest}
                         onWake={onWake}
+                        unseen={unseen(agentId)}
                         pinned={pinned.includes(name(agentId) ?? '')}
                         onPin={togglePin}
                         roomColor={isPinnedSection ? (groups?.find((g) => g.label === groupOf?.(agentId))?.color ?? null) : null}
@@ -376,7 +452,7 @@ export function AgentCardBar({
                 agentId={agentId}
                 variant={cardVariant(agentId, { activeId: activeAgentId, focusedId: focusedAgentId })}
                 appearance={getAppearance(agentId)}
-                status={statusFor(agentId)}
+                status={shownStatus(agentId)}
                 name={nameOf?.(agentId)}
                 onSelect={onSelect}
                 onClose={onClose}
