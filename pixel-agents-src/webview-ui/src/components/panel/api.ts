@@ -21,6 +21,8 @@ export interface ProjectRef {
 export interface DashboardRef {
   key: string;
   label: string;
+  project?: string;
+  sub?: string;
   dir: string;
   file: string;
   mtime: number;

@@ -34,6 +34,14 @@ export function DashboardPanel({ agent, info, onInfo }: { agent: string; info: A
   }, [dashboards, which]);
 
   const current = dashboards.find((d) => d.url === which) ?? dashboards[0];
+  // Reportes agrupados por proyecto, en el orden en que aparecen.
+  const groups: Array<{ name: string; items: DashboardRef[] }> = [];
+  for (const d of dashboards) {
+    const name = d.project ?? d.label.split(' · ')[0];
+    let g = groups.find((x) => x.name === name);
+    if (!g) groups.push((g = { name, items: [] }));
+    g.items.push(d);
+  }
 
   const remove = async () => {
     if (!current) return;
@@ -58,36 +66,25 @@ export function DashboardPanel({ agent, info, onInfo }: { agent: string; info: A
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      {dashboards.length > 6 && (
+      {dashboards.length > 1 && (
+        // Un desplegable agrupado por proyecto (repo): se entiende a cuál pertenece cada reporte.
         <div className="px-8 pt-6">
-          <select className="w-full bg-bg-dark border-2 border-border px-8 py-5 text-text" value={current.url} onChange={(e) => setWhich(e.target.value)} title={t('reports.pick')}>
-            {dashboards.map((d) => (
-              <option key={d.url} value={d.url}>
-                {d.label}
-              </option>
+          <select className="w-full bg-bg-dark px-8 py-6 text-text text-[13px]" value={current.url} onChange={(e) => setWhich(e.target.value)} title={t('reports.pick')}>
+            {groups.map((g) => (
+              <optgroup key={g.name} label={g.name}>
+                {g.items.map((d) => (
+                  <option key={d.url} value={d.url}>
+                    {(d.sub ? `${d.sub} · ` : '') + d.file}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
       )}
-      {dashboards.length > 1 && dashboards.length <= 6 && (
-        <div className="flex flex-wrap gap-4 px-8 pt-6">
-          {dashboards.map((d) => (
-            <button
-              key={d.url}
-              className={`px-10 py-4 border-2 ${
-                current.url === d.url ? 'border-accent bg-active-bg text-text' : 'border-border text-text-muted hover:text-text'
-              }`}
-              onClick={() => setWhich(d.url)}
-              title={`${d.dir}/${d.file}`}
-            >
-              {d.label}
-            </button>
-          ))}
-        </div>
-      )}
       <div className="flex items-center gap-8 px-10 py-4 text-text-muted text-[12px]">
         <span className="truncate" title={`${current.dir}/${current.file}`}>
-          {current.file} · {t('reports.updated')}{' '}
+          {current.project ? `${current.project} · ` : ''}{current.sub ? `${current.sub}/` : ''}{current.file} · {t('reports.updated')}{' '}
           {new Date(current.mtime).toLocaleString(locale(), { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
         </span>
         <button className="ml-auto text-accent-bright hover:underline underline-offset-4" onClick={() => setCreating(true)} title={t('reports.newTitle')}>

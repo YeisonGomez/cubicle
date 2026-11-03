@@ -33,6 +33,9 @@ export interface DashboardRef {
   key: string;
   /** Etiqueta de la sub-pestaña. */
   label: string;
+  /** Proyecto (repo) al que pertenece y subcarpeta dentro de él: para agrupar en el selector. */
+  project?: string;
+  sub?: string;
   /** Carpeta servida estáticamente. */
   dir: string;
   /** Archivo HTML dentro de la carpeta. */
@@ -157,7 +160,7 @@ export function agentDashboards(name: string): DashboardRef[] {
   if (fs.existsSync(path.join(globalDir, globalFile))) {
     const mtime = fs.statSync(path.join(globalDir, globalFile)).mtimeMs;
     const key = encodeKey(globalDir);
-    out.push({ key, label: name, dir: globalDir, file: globalFile, mtime, url: `./api/dash/${key}/${encodeURIComponent(globalFile)}` });
+    out.push({ key, label: name, project: name, sub: '', dir: globalDir, file: globalFile, mtime, url: `./api/dash/${key}/${encodeURIComponent(globalFile)}` });
   }
   const { settings } = agentSettingsOf(name);
   const projects = dashboardBases(name);
@@ -173,6 +176,8 @@ export function agentDashboards(name: string): DashboardRef[] {
           out.push({
             key,
             label: multi ? `${p.name} · ${name}` : name,
+            project: p.name,
+            sub: sub && sub !== 'docs/reports' ? sub : '',
             dir,
             file,
             mtime,
