@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 
-import { Button } from '../../components/ui/Button.js';
 import {
   BUBBLE_FADE_DURATION_SEC,
   BUBBLE_SITTING_OFFSET_PX,
@@ -29,7 +28,6 @@ const WAITING_INPUT_ACTIVITY_TEXT = 'Waiting for input';
 
 import { shortActivity, statusText } from '../../components/statusLabels.js';
 import { useT } from '../../i18n/index.js';
-import { IconSleep } from '../../components/icons.js';
 
 interface ToolOverlayProps {
   officeState: OfficeState;
@@ -110,11 +108,11 @@ export function ToolOverlay({
   zoom,
   panRef,
   onCloseAgent: _onCloseAgent, // el cierre ya no va en la etiqueta: solo en el menú de la ficha, con confirmación
-  onRestAgent,
-  onWakeAgent,
+  onRestAgent: _onRestAgent, // descansar/despertar ya no va en la etiqueta (parecía que dormía): solo en la ficha
+  onWakeAgent: _onWakeAgent,
   alwaysShowOverlay,
 }: ToolOverlayProps) {
-  const { t } = useT();
+  useT(); // re-render al cambiar el idioma
   const [, setTick] = useState(0);
   useEffect(() => {
     let rafId = 0;
@@ -343,26 +341,6 @@ export function ToolOverlay({
                     {activityText}
                   </span>
                 </div>
-                {isSelected && !isSub && (
-                  <>
-                    {(onRestAgent || onWakeAgent) && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (officeState.isResting(id)) onWakeAgent?.(id);
-                          else onRestAgent?.(id);
-                        }}
-                        title={officeState.isResting(id) ? t('overlay.wake') : t('overlay.rest')}
-                        className="ml-8 shrink-0 leading-none text-text hover:text-accent-bright"
-                      >
-                        {officeState.isResting(id) ? <span style={{ fontSize: 22 }}>☀️</span> : <IconSleep size={30} />}
-                      </Button>
-                    )}
-
-                  </>
-                )}
               </div>
             </div>
           </Fragment>
