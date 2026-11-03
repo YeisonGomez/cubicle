@@ -29,8 +29,8 @@ Oficina pixel-art: una sala por proyecto, cada sesión de Claude Code es un pers
 - Primera vez (solo con terminal disponible): sin Directorios → "Bienvenido a tu oficina" (oficina = carpeta con sesión que contiene carpetas con sesión; agrupado en árbol, nombres editables en línea, casillas propias) (sesiones de la última semana, nombre y sala); también Settings → "Importar sesiones de Claude…".
 
 <!-- cubicle:start -->
-## Cubicle (oficina de sesiones de Claude Code)
-Esta carpeta es el agente **Cubicle** de la oficina Cubicle. Hay un panel que muestra tus reportes, cambios git, notas y actividad.
-- **Reportes, informes y dashboards**: cuando te pidan uno, créalo como HTML autocontenido (CSS y datos en el mismo archivo, sin dependencias externas) en `docs/reports/<nombre-corto>.html`, en español. NUNCA uses artifacts ni abras el archivo en el navegador: aparece solo en la pestaña Reportes de Cubicle. Si el reporte ya existe, actualiza el mismo archivo.
-- Si no está claro si algo debe ser un reporte, pregúntalo antes de generar artefactos.
+## Cubicle (Claude Code sessions office)
+This folder is the **Cubicle** agent of the Cubicle office. A panel shows your reports, git changes, notes and activity.
+- **Reports and dashboards**: when asked for one, create it as a self-contained HTML (CSS and data inline, no external dependencies) at `docs/reports/<short-name>.html`. NEVER use artifacts or open the file in the browser: it shows up by itself in Cubicle's Reports tab. If the report already exists, update the same file.
+- If it is unclear whether something should be a report, ask before generating artifacts.
 <!-- cubicle:end -->

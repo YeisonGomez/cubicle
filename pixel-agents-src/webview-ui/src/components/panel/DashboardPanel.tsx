@@ -69,7 +69,7 @@ export function DashboardPanel({ agent, info, onInfo }: { agent: string; info: A
       {dashboards.length > 1 && (
         // Un desplegable agrupado por proyecto (repo): se entiende a cuál pertenece cada reporte.
         <div className="px-8 pt-6">
-          <select className="w-full bg-bg-dark px-8 py-6 text-text text-[13px]" value={current.url} onChange={(e) => setWhich(e.target.value)} title={t('reports.pick')}>
+          <select className="w-full bg-bg-dark border-2 border-border hover:border-accent focus:border-accent px-10 py-7 text-text text-[14px] cursor-pointer" value={current.url} onChange={(e) => setWhich(e.target.value)} title={t('reports.pick')}>
             {groups.map((g) => (
               <optgroup key={g.name} label={g.name}>
                 {g.items.map((d) => (

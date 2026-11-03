@@ -245,7 +245,7 @@ export function AgentCard({
               working ? 'border-accent-bright animate-pulse' : attention ? 'border-status-permission' : 'border-transparent'
             }`}
           />
-          {pk ? <img src={pk.sprite} alt={pk.name} title={pk.name} width={28} height={28} className="shrink-0" style={{ imageRendering: 'pixelated' }} /> : <CharacterMugShot palette={appearance.palette} hueShift={appearance.hueShift} size={28} />}
+          {pk ? <img src={pk.sprite} alt={pk.name} title={pk.name} width={36} height={36} className="shrink-0 -my-4" style={{ imageRendering: 'pixelated' }} /> : <CharacterMugShot palette={appearance.palette} hueShift={appearance.hueShift} size={28} />}
           <span
             className={`absolute -right-3 -bottom-3 size-8 border-2 border-bg ${
               effStatus ? STATUS_DOT[effStatus] : 'bg-transparent border-transparent'
@@ -294,7 +294,7 @@ export function AgentCard({
                 : 'border-transparent'
           }`}
         />
-        {pk ? <img src={pk.sprite} alt={pk.name} title={pk.name} width={40} height={40} style={{ imageRendering: 'pixelated' }} /> : <CharacterMugShot palette={appearance.palette} hueShift={appearance.hueShift} />}
+        {pk ? <img src={pk.sprite} alt={pk.name} title={pk.name} width={48} height={48} style={{ imageRendering: 'pixelated' }} /> : <CharacterMugShot palette={appearance.palette} hueShift={appearance.hueShift} />}
         <span
           className={`absolute -right-4 -bottom-4 size-10 border-2 border-bg ${
             status ? STATUS_DOT[status] : 'bg-transparent border-transparent'
