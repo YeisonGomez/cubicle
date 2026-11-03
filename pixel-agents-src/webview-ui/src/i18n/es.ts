@@ -275,6 +275,7 @@ export const es: Record<string, string> = {
   'usage.week': 'Semana',
   'usage.meterTitle': '{label}: {pct}% usado{reset}',
   'usage.resets': ' · se reinicia {t}',
+  'usage.noSession': 'Claude Code no entregó la ventana de 5 h esta vez (solo la manda en algunos planes y momentos).',
   'usage.stale': 'Dato de hace más de una hora',
   'usage.working': '{n} trabajando',
   'usage.workingTitle': 'Agentes trabajando ahora',

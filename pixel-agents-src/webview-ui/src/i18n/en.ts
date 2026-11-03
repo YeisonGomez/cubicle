@@ -262,6 +262,7 @@ export const en: Record<string, string> = {
   'usage.week': 'Week',
   'usage.meterTitle': '{label}: {pct}% used{reset}',
   'usage.resets': ' · resets {t}',
+  'usage.noSession': 'Claude Code did not report the 5-hour window this time (it only sends it on some plans and moments).',
   'usage.stale': 'Data older than an hour',
   'usage.working': '{n} working',
   'usage.workingTitle': 'Agents working now',

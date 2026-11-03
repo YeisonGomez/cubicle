@@ -72,7 +72,14 @@ export function UsageBadge({ working }: { working: number }) {
   return (
     <div className="ide-ui flex items-center gap-16">
       <span className={`flex items-center gap-16 ${stale ? 'opacity-50' : ''}`} title={stale ? t('usage.stale') : undefined}>
-        {usage && <Meter label={t('usage.session')} pct={typeof day === 'number' ? Math.round(day) : 0} reset={typeof day === 'number' ? fmtReset(usage.five_hour?.resets_at) : ''} />}
+        {usage && typeof day === 'number' && <Meter label={t('usage.session')} pct={Math.round(day)} reset={fmtReset(usage.five_hour?.resets_at)} />}
+        {usage && typeof day !== 'number' && (
+          // Claude Code no entregó la ventana de 5 h (five_hour: null): no es 0 %, es "sin dato".
+          <span className="flex items-center gap-6 text-[12px] text-text-muted" title={t('usage.noSession')}>
+            <span className="uppercase tracking-wider">{t('usage.session')}</span>
+            <span>—</span>
+          </span>
+        )}
         {typeof week === 'number' && <Meter label={t('usage.week')} pct={Math.round(week)} reset={fmtReset(usage?.seven_day?.resets_at, true)} />}
       </span>
       {working > 0 && (
