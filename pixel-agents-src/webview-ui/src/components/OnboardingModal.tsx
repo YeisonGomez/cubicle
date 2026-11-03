@@ -3,27 +3,10 @@ import { useEffect, useState } from 'react';
 import { LANGS, locale, setLang, t, useT } from '../i18n/index.js';
 import { apiHeaders, prettyPath } from './FolderPicker.js';
 import { Button } from './ui/Button.js';
+import { CheckMark as Check } from './ui/CheckMark.js';
+import { Segmented } from './ui/Segmented.js';
 import { Modal } from './ui/Modal.js';
 import { SkinPicker } from './SkinPicker.js';
-
-/** Casilla propia (la nativa se ve anticuada): cuadro con marca, color de acento al activarse. */
-function Check({ on, disabled, onChange, title }: { on: boolean; disabled?: boolean; onChange: (v: boolean) => void; title?: string }) {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={on}
-      disabled={disabled}
-      title={title}
-      onClick={() => onChange(!on)}
-      className={`inline-flex items-center justify-center size-16 border-2 shrink-0 ${on ? 'bg-accent border-accent text-bg' : 'bg-bg-dark border-border text-transparent hover:border-accent'} disabled:opacity-40`}
-    >
-      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
-        <path d="M2 5.2 4.2 7.4 8 2.8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </button>
-  );
-}
 
 /** Texto editable en línea: se ve como texto; al pasar el mouse o enfocar aparece la línea inferior. */
 function InlineEdit({ value, onChange, disabled, bold, width = 200, placeholder }: { value: string; onChange: (v: string) => void; disabled?: boolean; bold?: boolean; width?: number; placeholder?: string }) {
@@ -154,20 +137,12 @@ export function OnboardingModal({ firstRun, onClose }: { firstRun: boolean; onCl
         <div className="flex items-center gap-10">
           <span className="t-desc">{firstRun ? t('onboarding.helpFirst') : t('onboarding.helpImport')}</span>
           {firstRun && <SkinPicker compact />}
-          <span className="ml-auto inline-flex items-center gap-4" title="Idioma / Language">
-            {LANGS.map((l) => (
-              <button
-                key={l.id}
-                className={`px-6 py-2 border-2 text-[12px] ${lang === l.id ? 'border-accent text-text' : 'border-border text-text-muted hover:text-text'}`}
-                onClick={() => setLang(l.id)}
-              >
-                {l.label}
-              </button>
-            ))}
+          <span className="ml-auto" title="Idioma / Language">
+            <Segmented value={lang} options={LANGS.map((l) => ({ id: l.id, label: l.label }))} onChange={(id) => setLang(id)} />
           </span>
           <label className="inline-flex items-center gap-6 t-desc">
             {t('onboarding.last')}
-            <select className="bg-bg-dark border-2 border-border px-4 py-2 text-text" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+            <select className="bg-bg-dark hover:bg-btn-hover rounded-md px-8 py-4 text-text outline-none cursor-pointer" value={days} onChange={(e) => setDays(Number(e.target.value))}>
               {[7, 14, 30, 90].map((d) => (
                 <option key={d} value={d}>
                   {t('onboarding.days', { n: d })}
@@ -179,7 +154,7 @@ export function OnboardingModal({ firstRun, onClose }: { firstRun: boolean; onCl
 
         {/* Agrupado por oficina (sala), como el árbol de Cambios: cabecera de la
             oficina con su nombre editable y, debajo, sus agentes. */}
-        <div className="max-h-[440px] overflow-y-auto border-2 border-border">
+        <div className="max-h-[440px] overflow-y-auto rounded-md border border-border">
           {!rows && !error && <div className="px-10 py-8 text-text-muted">{t('onboarding.searching')}</div>}
           {rows && rows.length === 0 && <div className="px-10 py-8 text-text-muted">{t('onboarding.none')}</div>}
           {groups.map((g) => {
@@ -187,10 +162,10 @@ export function OnboardingModal({ firstRun, onClose }: { firstRun: boolean; onCl
             const sel = editable.filter((r) => r.checked).length;
             const open = !collapsed.has(g.key);
             return (
-              <div key={g.key} className="border-b-2 border-border last:border-b-0">
+              <div key={g.key} className="border-b border-border last:border-b-0">
                 <div className="flex items-center gap-8 px-10 h-[36px] bg-bg-dark">
-                  <Check on={sel > 0 && sel === editable.length} disabled={editable.length === 0} onChange={(v) => editable.forEach((r) => update(r.path, { checked: v }))} title={t('onboarding.allOffice')} />
-                  <button className="text-text-muted hover:text-text" onClick={() => toggle(g.key)} title={open ? t('onboarding.collapse') : t('onboarding.expand')}>
+                  <Check on={sel > 0 && sel === editable.length} mixed={sel > 0 && sel < editable.length} disabled={editable.length === 0} onChange={(v) => editable.forEach((r) => update(r.path, { checked: v }))} title={t('onboarding.allOffice')} />
+                  <button className="flex items-center justify-center size-24 rounded text-text-muted hover:text-text hover:bg-btn-hover" onClick={() => toggle(g.key)} title={open ? t('onboarding.collapse') : t('onboarding.expand')}>
                     <Chevron open={open} />
                   </button>
                   <span className="t-sub">{t('onboarding.office')}</span>

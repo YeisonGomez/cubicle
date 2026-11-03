@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { useT } from '../i18n/index.js';
 import { loadSkin, updateSkin, useSkin } from '../skin.js';
-import { Button } from './ui/Button.js';
+import { Segmented } from './ui/Segmented.js';
 
 /**
  * Elección del skin de los personajes: Clásico o Pokémon. Con Pokémon, cada sala
@@ -31,14 +31,15 @@ export function SkinPicker({ compact = false }: { compact?: boolean }) {
   };
   const typeName = (id: string) => skin.types.find((x) => x.id === id)?.[lang === 'es' ? 'es' : 'en'] ?? id;
   const buttons = (
-    <span className="flex gap-4">
-      <Button variant={skin.theme === 'classic' ? 'active' : 'default'} size="sm" disabled={busy} onClick={() => void run({ theme: 'classic' })}>
-        {t('skin.classic')}
-      </Button>
-      <Button variant={skin.theme === 'pokemon' ? 'active' : 'default'} size="sm" disabled={busy} onClick={() => void run({ theme: 'pokemon' })}>
-        {t('skin.pokemon')}
-      </Button>
-    </span>
+    <Segmented
+      value={skin.theme}
+      disabled={busy}
+      options={[
+        { id: 'classic', label: t('skin.classic') },
+        { id: 'pokemon', label: t('skin.pokemon') },
+      ]}
+      onChange={(id) => void run({ theme: id })}
+    />
   );
   if (compact) {
     return (
@@ -60,7 +61,7 @@ export function SkinPicker({ compact = false }: { compact?: boolean }) {
           {Object.entries(skin.rooms).map(([label, type]) => (
             <label key={label} className="flex items-center justify-between gap-12 py-2">
               <span className="truncate">{label}</span>
-              <select className="bg-bg-dark px-10 py-6 text-text text-base min-w-[220px] border-2 border-border" value={type} disabled={busy} onChange={(e) => void run({ rooms: { [label]: e.target.value } })}>
+              <select className="bg-bg-dark px-10 py-6 text-text text-base min-w-[220px] rounded-md hover:bg-btn-hover outline-none cursor-pointer" value={type} disabled={busy} onChange={(e) => void run({ rooms: { [label]: e.target.value } })}>
                 {skin.types.map((x) => (
                   <option key={x.id} value={x.id}>
                     {typeName(x.id)}

@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 interface CheckboxProps {
@@ -15,9 +16,9 @@ export function Checkbox({ checked, onChange, label, className = '' }: CheckboxP
     >
       <span>{label}</span>
       <span
-        className={`w-14 h-14 border-2 border-white/50 rounded-none shrink-0 flex items-center justify-center text-2xs pl-1.5 pb-4 leading-none text-white ${checked ? 'bg-accent' : 'bg-transparent'}`}
+        className={`size-18 shrink-0 rounded-[5px] flex items-center justify-center transition-colors ${checked ? 'bg-accent text-white' : 'bg-white/10 text-transparent'}`}
       >
-        {checked ? 'x' : ''}
+        <Check size={13} strokeWidth={3} />
       </span>
     </button>
   );
