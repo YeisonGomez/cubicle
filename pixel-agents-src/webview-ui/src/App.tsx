@@ -54,6 +54,7 @@ import { EditTool, type OfficeLayout, TILE_SIZE } from './office/types.js';
 import { isBrowserRuntime, isE2E } from './runtime.js';
 import { installTestHooks } from './testHooks.js';
 import { transport } from './transport/index.js';
+import { TokenBanner } from './components/TokenBanner.js';
 
 // Game state lives outside React — updated imperatively by message handlers
 const officeStateRef = { current: null as OfficeState | null };
@@ -829,6 +830,7 @@ function App() {
         isMobile && keyboard.clampHeight !== null ? { height: keyboard.clampHeight } : undefined
       }
     >
+      <TokenBanner />
       {isMobile ? (
         <MobileShell
           office={officeRegion}

@@ -1,5 +1,8 @@
 /** English dictionary. Keys mirror es.ts. */
 export const en: Record<string, string> = {
+  'token.missing': 'No token: the terminal and actions are locked. Run cubicle open once, or paste the token from ~/.pixel-agents/standalone-token',
+  'token.paste': 'Paste the token',
+  'token.use': 'Use',
   'common.cancel': 'Cancel',
   'common.confirm': 'Confirm',
   'common.save': 'Save',

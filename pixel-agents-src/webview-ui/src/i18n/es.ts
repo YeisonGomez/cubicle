@@ -1,6 +1,9 @@
 /** Diccionario español (idioma original de la oficina). */
 export const es: Record<string, string> = {
   // ── Común ──
+  'token.missing': 'Sin token: la terminal y las acciones están bloqueadas. Corre cubicle open una vez, o pega el token de ~/.pixel-agents/standalone-token',
+  'token.paste': 'Pega el token',
+  'token.use': 'Usar',
   'common.cancel': 'Cancelar',
   'common.confirm': 'Confirmar',
   'common.save': 'Guardar',
