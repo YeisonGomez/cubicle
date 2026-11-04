@@ -367,12 +367,20 @@ function App() {
   useEffect(() => {
     void loadSkin();
   }, []);
+  // Agentes nuevos (o renombrados) aún sin Pokémon: el servidor los sortea al pedir el skin.
+  const skinAsked = useRef(new Set<string>());
   useEffect(() => {
     const os = getOfficeState();
+    let missing = false;
     for (const [id, ch] of os.characters) {
       const a = ch.directoryName ? skin.agents[ch.directoryName] : undefined;
       os.setSkin(id, skin.theme === 'pokemon' && a ? { url: a.sprite, walk: a.walk, name: a.name } : null);
+      if (skin.theme === 'pokemon' && ch.directoryName && !a && !skinAsked.current.has(ch.directoryName)) {
+        skinAsked.current.add(ch.directoryName);
+        missing = true;
+      }
     }
+    if (missing) setTimeout(() => void loadSkin(), 800);
   }, [skin, agents, terminalAgentIds]);
   // Ficha de proyecto (sala), a la derecha: desde el nombre de la sala en la barra o su letrero.
   const [projectRoom, setProjectRoom] = useState<string | null>(null);
