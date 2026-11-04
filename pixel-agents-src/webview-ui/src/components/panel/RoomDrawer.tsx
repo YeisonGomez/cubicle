@@ -250,6 +250,7 @@ export function RoomDrawer({ target, color, onClose, onRenamed, onRenaming }: Ro
           agent={roomAgents[0].name}
           info={{ ...roomAgents[0], dashboards: roomAgents.flatMap((a) => a.dashboards.map((d) => ({ ...d, label: roomAgents.length > 1 ? `${a.name} · ${d.label}` : d.label }))) }}
           onInfo={() => undefined}
+          configurable={false}
         />
       )}
       {tab === 'dashboard' && !agentName && roomAgents.length === 0 && <div className="px-12 py-8 text-text-muted">{t('common.loadingLower')}</div>}

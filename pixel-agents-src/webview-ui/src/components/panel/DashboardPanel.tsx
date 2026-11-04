@@ -1,4 +1,4 @@
-import { ExternalLink, RefreshCw, Trash2 } from 'lucide-react';
+import { ChevronDown, ExternalLink, RefreshCw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -8,12 +8,13 @@ import { Button } from '../ui/Button.js';
 import { IconButton } from '../ui/IconButton.js';
 import type { AgentInfo, DashboardRef } from './api.js';
 import { authHeaders, deleteDashboard, fetchInfo } from './api.js';
+import { ReportDirsConfig } from './ReportDirsConfig.js';
 
 /**
  * Dashboards del agente: sub-pestaña por archivo HTML detectado. La lista (y su
  * mtime) la refresca el panel padre; cuando cambia el mtime el iframe se recarga.
  */
-export function DashboardPanel({ agent, info, onInfo }: { agent: string; info: AgentInfo; onInfo?: (i: AgentInfo) => void }) {
+export function DashboardPanel({ agent, info, onInfo, configurable = true }: { agent: string; info: AgentInfo; onInfo?: (i: AgentInfo) => void; configurable?: boolean }) {
   const { t } = useT();
   const dashboards: DashboardRef[] = info.dashboards;
   const [which, setWhich] = useState<string>(dashboards[0]?.url ?? '');
@@ -61,15 +62,22 @@ export function DashboardPanel({ agent, info, onInfo }: { agent: string; info: A
   };
 
   if (!current || creating) {
-    return <NewReportForm agent={agent} info={info} onDone={() => setCreating(false)} cancel={current ? () => setCreating(false) : undefined} />;
+    return (
+      <div className="flex-1 min-h-0 flex flex-col">
+        {configurable && <ReportDirsConfig agent={agent} info={info} onInfo={onInfo} defaultOpen={!current} />}
+        <NewReportForm agent={agent} info={info} onDone={() => setCreating(false)} cancel={current ? () => setCreating(false) : undefined} />
+      </div>
+    );
   }
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
+      {configurable && <ReportDirsConfig agent={agent} info={info} onInfo={onInfo} />}
       {dashboards.length > 1 && (
         // Un desplegable agrupado por proyecto (repo): se entiende a cuál pertenece cada reporte.
-        <div className="px-8 pt-6">
-          <select className="w-full bg-bg-dark border-2 border-border hover:border-accent focus:border-accent px-10 py-7 text-text text-[14px] cursor-pointer" value={current.url} onChange={(e) => setWhich(e.target.value)} title={t('reports.pick')}>
+        <div className="px-8 pt-6 relative">
+          <ChevronDown size={16} className="pointer-events-none absolute right-20 top-1/2 mt-3 -translate-y-1/2 text-text-muted" />
+          <select className="w-full appearance-none rounded-md bg-bg-dark border border-border hover:border-accent focus:border-accent outline-none pl-10 pr-36 py-7 text-text text-[14px] cursor-pointer" value={current.url} onChange={(e) => setWhich(e.target.value)} title={t('reports.pick')}>
             {groups.map((g) => (
               <optgroup key={g.name} label={g.name}>
                 {g.items.map((d) => (

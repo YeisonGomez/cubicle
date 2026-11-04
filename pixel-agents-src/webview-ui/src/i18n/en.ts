@@ -170,6 +170,7 @@ export const en: Record<string, string> = {
   'prs.sending': 'Sending…',
   'prs.sentReport': 'Sent: the session is reviewing PR #{n}. Look at its terminal; the HTML report will appear in Reports.',
   'prs.sentConflicts': 'Sent: the session is resolving the conflicts of PR #{n} in a worktree.',
+  'reports.dirs.label': 'Folders checked:',
   'settings.reports.title': 'Report folders',
   'settings.reports.hint': "Every HTML file in these folders (inside each repository and the agent's folder) is a sub-tab of Reports.",
   'settings.reports.active': 'Active',

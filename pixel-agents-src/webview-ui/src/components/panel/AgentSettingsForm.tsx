@@ -30,11 +30,10 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   );
 }
 
-/** Configuración de un agente: nombre, repositorios (Cambios) y carpetas de reportes. */
+/** Configuración de un agente: nombre, repositorios (Cambios) y PRs. Las carpetas de reportes están en Reportes. */
 export function AgentSettingsForm({ name, info, onSaved, onRenamed, onRenaming }: { name: string; info: AgentInfo; onSaved: (i: AgentInfo) => void; onRenamed?: (name: string) => void; onRenaming?: (from: string, to: string) => void }) {
   const { t } = useT();
   const [projects, setProjects] = useState<string[]>(info.settings.projects);
-  const [dashDirs, setDashDirs] = useState<string[]>(info.settings.dashboardDirs);
   const [prReview, setPrReview] = useState<boolean>(info.settings.prReview === true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -44,7 +43,7 @@ export function AgentSettingsForm({ name, info, onSaved, onRenamed, onRenaming }
     setMsg(null);
     try {
       const kind: AgentSettings['kind'] = info.projects.length > 0 ? 'code' : 'personal';
-      onSaved(await putSettings(name, { kind, projects, dashboardDirs: dashDirs, prReview }));
+      onSaved(await putSettings(name, { kind, projects, dashboardDirs: info.settings.dashboardDirs, prReview }));
       setMsg(t('common.saved'));
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
@@ -57,7 +56,6 @@ export function AgentSettingsForm({ name, info, onSaved, onRenamed, onRenaming }
     <div className="flex-1 min-h-0 overflow-y-auto px-14 py-12 flex flex-col gap-14">
       <RenameField name={name} onRenamed={onRenamed} onRenaming={onRenaming} />
       <ReposField info={info} projects={projects} setProjects={setProjects} />
-      <ReportDirsField info={info} dashDirs={dashDirs} setDashDirs={setDashDirs} />
       <Section title={t('settings.pr.title')} hint={t('settings.pr.hint')}>
         <label className="flex items-center gap-8 cursor-pointer">
           <input type="checkbox" checked={prReview} onChange={(e) => setPrReview(e.target.checked)} />
@@ -169,86 +167,6 @@ function ReposField({ info, projects, setProjects }: { info: AgentInfo; projects
           </div>
         </div>
       )}
-    </Section>
-  );
-}
-
-// ── Carpetas de reportes ──────────────────────────────────────
-
-function Sub({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="border-l-2 border-border pl-10 flex flex-col gap-4">
-      <div className="t-sub">{title}</div>
-      {children}
-    </div>
-  );
-}
-
-function ReportDirsField({ info, dashDirs, setDashDirs }: { info: AgentInfo; dashDirs: string[]; setDashDirs: (f: (l: string[]) => string[]) => void }) {
-  const { t } = useT();
-  const [draft, setDraft] = useState('');
-  const add = (d: string) => setDashDirs((l) => (l.includes(d) ? l : [...l, d]));
-  const suggestions = info.dashboardSuggestions.filter((x) => !dashDirs.includes(x.dir));
-  return (
-    <Section title={t('settings.reports.title')} hint={t('settings.reports.hint')}>
-      <Sub title={t('settings.reports.active')}>
-        {dashDirs.length === 0 && <div className="text-text-muted text-[12px]">{t('settings.reports.none')}</div>}
-        <ul className="flex flex-col">
-          {dashDirs.map((d) => (
-            <li key={d} className="flex items-center gap-8 h-[26px]">
-              <span className="ide-code text-text">{d}</span>
-              <button className={`ml-auto ${linkCls}`} onClick={() => setDashDirs((l) => l.filter((x) => x !== d))}>
-                {t('common.remove')}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </Sub>
-      {suggestions.length > 0 && (
-        <Sub title={t('settings.reports.detected')}>
-          <ul className="flex flex-col">
-            {suggestions.map((x) => (
-              <li key={x.dir} className="flex items-center gap-8 h-[26px]">
-                <span className="ide-code text-text-muted">{x.dir}</span>
-                <span className="text-text-muted text-[11px] truncate">
-                  {t('settings.reports.htmlIn', { n: x.html, bases: x.bases.join(', ') })}
-                </span>
-                <button className={`ml-auto ${linkCls}`} onClick={() => add(x.dir)}>
-                  {t('common.add')}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Sub>
-      )}
-      <Sub title={t('settings.reports.other')}>
-        <div className="flex items-center gap-8">
-          <input
-            className={`${inputCls} ide-code py-3`}
-            value={draft}
-            placeholder={t('settings.reports.placeholder')}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && draft.trim()) {
-                add(draft.trim());
-                setDraft('');
-              }
-            }}
-            spellCheck={false}
-          />
-          <Button
-            variant="default"
-            size="sm"
-            disabled={!draft.trim()}
-            onClick={() => {
-              add(draft.trim());
-              setDraft('');
-            }}
-          >
-            {t('common.add')}
-          </Button>
-        </div>
-      </Sub>
     </Section>
   );
 }

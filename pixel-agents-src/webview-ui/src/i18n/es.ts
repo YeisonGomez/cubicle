@@ -178,6 +178,7 @@ export const es: Record<string, string> = {
   'prs.sending': 'Enviando…',
   'prs.sentReport': 'Enviado: la sesión está revisando el PR #{n}. Mira su terminal; el informe HTML aparecerá en Reportes.',
   'prs.sentConflicts': 'Enviado: la sesión está resolviendo los conflictos del PR #{n} en un worktree.',
+  'reports.dirs.label': 'Carpetas que revisa:',
   'settings.reports.title': 'Carpetas de reportes',
   'settings.reports.hint': 'Cada archivo HTML de estas carpetas (dentro de cada repositorio y de la carpeta del agente) es una sub-pestaña de Reportes.',
   'settings.reports.active': 'Activas',
