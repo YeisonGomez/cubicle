@@ -15,7 +15,7 @@ import { hostDirectory } from '../hostDirectory.js';
 import type { HttpServerOptions } from '../httpServer.js';
 import { writeLayoutToFile } from '../layoutPersistence.js';
 import { officeDir, scriptsDir, activityFile, capabilitiesFile } from '../officePaths.js';
-import { relaunchAll } from '../terminal/relaunch.js';
+import { killStrayOfficeClaude, relaunchAll } from '../terminal/relaunch.js';
 import { launchStandaloneAgent } from '../terminal/standaloneAgentLauncher.js';
 import { bearerAuth, desksFor, HOME, insideHome, launchDeps, runProyecto, writePromptToAgent } from './shared.js';
 
@@ -145,6 +145,8 @@ export function registerRoomsRoutes(app: FastifyInstance, options: HttpServerOpt
     for (const a of [...options.store.values()]) {
       if (!a.isExternal && a.directoryName === name && deps?.ptyManager.has(a.id)) options.runtime?.closeAgent(a.id);
     }
+    // Si quedó un proceso de la oficina trabajando en esa carpeta sin agente, se cierra también.
+    if (deps) killStrayOfficeClaude(deps, [entry.path]);
     options.store.broadcast({ type: 'directoriesLoaded', directories: listDirectories([hostDirectory()]) });
     options.store.broadcast({ type: 'areaMappingsLoaded', mappings: cfg.standalone.areaMappings });
     let relayout: string | null = null;

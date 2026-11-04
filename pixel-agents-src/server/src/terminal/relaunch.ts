@@ -66,8 +66,8 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 /** Procesos `claude` vivos en esta máquina (sin los de nuestras terminales): pid, argv y cwd.
  *  Es la prueba real de "conversación abierta en otra terminal"; el mtime del transcript
  *  no sirve, porque justo tras reiniciar la oficina todos los transcripts son recientes. */
-function liveClaudeProcesses(ownPids: Set<number>): Array<{ pid: number; argv: string; cwd: string | null }> {
-  const procs: Array<{ pid: number; argv: string; cwd: string | null }> = [];
+function liveClaudeProcesses(ownPids: Set<number>): Array<{ pid: number; argv: string; cwd: string | null; ppid?: number }> {
+  const procs: Array<{ pid: number; argv: string; cwd: string | null; ppid?: number }> = [];
   if (process.platform === 'win32') {
     // Windows: lista de procesos por PowerShell (sin cwd: solo se reconoce por --resume <id>).
     try {
@@ -89,17 +89,17 @@ function liveClaudeProcesses(ownPids: Set<number>): Array<{ pid: number; argv: s
   }
   let ps: string;
   try {
-    ps = execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8', timeout: 5000 });
+    ps = execFileSync('ps', ['-axo', 'pid=,ppid=,command='], { encoding: 'utf8', timeout: 5000 });
   } catch {
     return [];
   }
   for (const line of ps.split('\n')) {
-    const m = /^\s*(\d+)\s+(.*)$/.exec(line);
+    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
     if (!m) continue;
     const pid = Number(m[1]);
-    const argv = m[2];
+    const argv = m[3];
     if (!/(^|\/)claude(\s|$)/.test(argv) || /chrome-native-host/.test(argv) || ownPids.has(pid)) continue;
-    procs.push({ pid, argv, cwd: null });
+    procs.push({ pid, argv, cwd: null, ppid: Number(m[2]) });
   }
   if (procs.length === 0) return procs;
   try {
@@ -123,6 +123,41 @@ function liveClaudeProcesses(ownPids: Set<number>): Array<{ pid: number; argv: s
     }
   }
   return procs;
+}
+
+/**
+ * Terminales huérfanas de la oficina: procesos `claude` hijos de ESTE servidor que ya no
+ * pertenecen a ningún agente (p. ej. el de un agente borrado). No son "otra terminal":
+ * se cierran, para que no bloqueen el lanzamiento de un agente nuevo en esa carpeta.
+ * `paths` limita a las que trabajan en esas carpetas (o subcarpetas).
+ */
+export function killStrayOfficeClaude(deps: LaunchStandaloneAgentDeps, paths?: string[]): number {
+  if (process.platform === 'win32') return 0;
+  const ownPids = new Set<number>();
+  for (const a of deps.store.values()) {
+    const pid = deps.ptyManager.get(a.id)?.pid;
+    if (typeof pid === 'number') ownPids.add(pid);
+  }
+  const roots = (paths ?? []).flatMap((p) => {
+    try {
+      return [p, fs.realpathSync(p)];
+    } catch {
+      return [p];
+    }
+  });
+  let n = 0;
+  for (const pr of liveClaudeProcesses(ownPids)) {
+    if (pr.ppid !== process.pid) continue;
+    if (roots.length > 0 && !(pr.cwd && roots.some((r) => pr.cwd === r || pr.cwd!.startsWith(r + path.sep)))) continue;
+    try {
+      process.kill(pr.pid, 'SIGTERM');
+      n++;
+      console.log(`[Pixel Agents] Terminal huérfana cerrada (pid ${pr.pid}, ${pr.cwd ?? '?'})`);
+    } catch {
+      /* ya terminó */
+    }
+  }
+  return n;
 }
 
 /** ¿La conversación sigue abierta en otra terminal? Hay un proceso `claude` ajeno a la
@@ -157,12 +192,15 @@ export async function relaunchAll(
   const dirs = readConfig().directories.filter(
     (d) => !options.only || options.only.includes(d.name) || options.only.includes(d.path),
   );
+  // Terminales de la oficina sin agente en estas carpetas (p. ej. de un agente borrado): se cierran antes.
+  killStrayOfficeClaude(deps, dirs.map((d) => d.path));
   const ownPids = new Set<number>();
   for (const a of store.values()) {
     const pid = ptyManager.get(a.id)?.pid;
     if (typeof pid === 'number') ownPids.add(pid);
   }
-  const procs = liveClaudeProcesses(ownPids);
+  // Los hijos de este servidor no son "otra terminal" (son terminales de la oficina sin agente).
+  const procs = liveClaudeProcesses(ownPids).filter((p) => p.ppid !== process.pid);
   for (const d of dirs) {
     const cwd = d.path;
     if (!fs.existsSync(cwd)) {
