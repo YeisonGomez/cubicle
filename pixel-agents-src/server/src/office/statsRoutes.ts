@@ -139,8 +139,18 @@ export function registerStatsRoutes(app: FastifyInstance, options: HttpServerOpt
   app.get('/api/activity', async () => {
     const out: Record<number, { lastActivityAt: number | null; directoryName?: string }> = {};
     for (const [id, agent] of options.store) {
+      // Sin prompt humano todavía: cuenta desde que se creó la conversación (un agente recién
+      // creado no se va al sofá); sin transcript aún, acaba de lanzarse → ahora.
+      let at = agent.jsonlFile ? transcriptLastActivity(agent.jsonlFile) : null;
+      if (at === null) {
+        try {
+          at = agent.jsonlFile ? fs.statSync(agent.jsonlFile).birthtimeMs || null : Date.now();
+        } catch {
+          at = Date.now();
+        }
+      }
       out[id] = {
-        lastActivityAt: agent.jsonlFile ? transcriptLastActivity(agent.jsonlFile) : null,
+        lastActivityAt: at,
         directoryName: agent.directoryName,
       };
     }

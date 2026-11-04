@@ -310,6 +310,10 @@ export function registerRoomsRoutes(app: FastifyInstance, options: HttpServerOpt
         reply.code(500).send({ error: out.log });
         return;
       }
+      // La barra agrupa por areaMappings del cliente: sin avisarle, el agente nuevo caía en "Otros" hasta recargar.
+      const cfgNow = readConfig();
+      options.store.broadcast({ type: 'directoriesLoaded', directories: listDirectories([hostDirectory()]) });
+      options.store.broadcast({ type: 'areaMappingsLoaded', mappings: cfgNow.standalone.areaMappings });
       // Abrir su agente (conversación nueva si no tenía sesiones).
       const deps = launchDeps(options);
       const launched = deps
