@@ -26,23 +26,28 @@ export function NewProjectModal({ onClose }: { onClose: () => void }) {
   const [chosen, setChosen] = useState<{ path: string | null; entry: FsEntry | null }>({ path: null, entry: null });
   const [name, setName] = useState('');
   const [nameTouched, setNameTouched] = useState(false);
+  // Nombre del agente que nace con la oficina (por defecto, el de la oficina).
+  const [agent, setAgent] = useState('');
+  const [agentTouched, setAgentTouched] = useState(false);
   const [tema, setTema] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const chosenName = chosen.path ? (chosen.path.split('/').filter(Boolean).pop() ?? '') : '';
   const effectiveName = nameTouched ? name : chosenName;
+  const effectiveAgent = agentTouched ? agent : effectiveName;
   const alreadyRegistered = chosen.entry?.registered ?? false;
 
   const create = async () => {
-    if (!chosen.path || !effectiveName.trim()) return;
+    if (!chosen.path || !effectiveName.trim() || !effectiveAgent.trim()) return;
     setBusy(true);
     setError(null);
     try {
       const res = await fetch('./api/projects', {
         method: 'POST',
         headers: apiHeaders(),
-        body: JSON.stringify({ name: effectiveName.trim(), path: chosen.path, ...(tema ? { tema } : {}) }),
+        // name = agente (Directorio); sala = oficina.
+        body: JSON.stringify({ name: effectiveAgent.trim(), sala: effectiveName.trim(), path: chosen.path, ...(tema ? { tema } : {}) }),
       });
       const body = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
@@ -63,9 +68,9 @@ export function NewProjectModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="flex items-center gap-10">
           <label className="flex items-center gap-6 flex-1 min-w-0">
-            <span className="text-text-muted shrink-0">{t('newOffice.name')}</span>
+            <span className="text-text-muted shrink-0">{t('newOffice.officeName')}</span>
             <input
-              className="flex-1 min-w-0 bg-bg-dark border-2 border-border px-8 py-4 text-text outline-none focus:border-accent"
+              className="flex-1 min-w-0 bg-bg-dark rounded-md px-8 py-4 text-text outline-none focus:ring-1 focus:ring-accent"
               value={effectiveName}
               onChange={(e) => {
                 setNameTouched(true);
@@ -73,9 +78,20 @@ export function NewProjectModal({ onClose }: { onClose: () => void }) {
               }}
             />
           </label>
+          <label className="flex items-center gap-6 flex-1 min-w-0" title={t('newOffice.agentHelp')}>
+            <span className="text-text-muted shrink-0">{t('newOffice.agent')}</span>
+            <input
+              className="flex-1 min-w-0 bg-bg-dark rounded-md px-8 py-4 text-text outline-none focus:ring-1 focus:ring-accent"
+              value={effectiveAgent}
+              onChange={(e) => {
+                setAgentTouched(true);
+                setAgent(e.target.value);
+              }}
+            />
+          </label>
           <label className="flex items-center gap-6">
             <span className="text-text-muted">{t('newOffice.theme')}</span>
-            <select className="bg-bg-dark border-2 border-border px-6 py-4 text-text" value={tema} onChange={(e) => setTema(e.target.value)}>
+            <select className="bg-bg-dark hover:bg-btn-hover rounded-md px-6 py-4 text-text outline-none cursor-pointer" value={tema} onChange={(e) => setTema(e.target.value)}>
               {TEMAS.map((x) => (
                 <option key={x.id} value={x.id}>
                   {t(x.key)}
@@ -93,7 +109,7 @@ export function NewProjectModal({ onClose }: { onClose: () => void }) {
           <Button
             variant="accent"
             onClick={() => void create()}
-            disabled={!chosen.path || !effectiveName.trim() || busy || alreadyRegistered}
+            disabled={!chosen.path || !effectiveName.trim() || !effectiveAgent.trim() || busy || alreadyRegistered}
             title={t('newOffice.createTitle')}
           >
             {busy ? t('newOffice.creating') : t('newOffice.create')}
