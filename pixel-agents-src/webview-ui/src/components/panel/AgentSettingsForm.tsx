@@ -1,10 +1,11 @@
 import { useState } from 'react';
 
+import { renameAgent } from '../../renameAgent.js';
 import { useT } from '../../i18n/index.js';
 import { FolderPicker, prettyPath } from '../FolderPicker.js';
 import { Button } from '../ui/Button.js';
 import type { AgentInfo, AgentSettings } from './api.js';
-import { authHeaders, putSettings } from './api.js';
+import { putSettings } from './api.js';
 
 /*
  * Lenguaje visual del formulario (una sola cosa por elemento):
@@ -88,14 +89,7 @@ function RenameField({ name, onRenamed, onRenaming }: { name: string; onRenamed?
     setErr(null);
     onRenaming?.(name, to); // el agente se cierra y relanza: que el panel no salte a otro
     try {
-      const r = await fetch(`./api/agents/${encodeURIComponent(name)}/rename`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ name: to }),
-      });
-      const b = (await r.json()) as { error?: string; name?: string };
-      if (!r.ok) throw new Error(b.error ?? `HTTP ${r.status}`);
-      onRenamed?.(b.name ?? to);
+      onRenamed?.(await renameAgent(name, to));
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {

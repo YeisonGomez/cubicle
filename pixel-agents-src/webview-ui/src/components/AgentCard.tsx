@@ -12,6 +12,8 @@ import { CharacterMugShot } from './CharacterMugShot.js';
 import { IconPin } from './icons.js';
 import { Button } from './ui/Button.js';
 import { ConfirmModal } from './ui/ConfirmModal.js';
+import { Modal } from './ui/Modal.js';
+import { renameAgent } from '../renameAgent.js';
 
 /** How a given agent's character looks, for the tab mug shot. */
 export interface AgentAppearance {
@@ -108,6 +110,19 @@ export function AgentCard({
   const { t } = useT();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
+  const [renaming, setRenaming] = useState<{ value: string; busy: boolean; err: string | null } | null>(null);
+  const submitRename = async () => {
+    if (!renaming || !name) return;
+    const to = renaming.value.trim();
+    if (!to || to === name) return setRenaming(null);
+    setRenaming({ ...renaming, busy: true, err: null });
+    try {
+      await renameAgent(name, to);
+      setRenaming(null);
+    } catch (e) {
+      setRenaming({ value: renaming.value, busy: false, err: e instanceof Error ? e.message : String(e) });
+    }
+  };
 
   useEffect(() => {
     if (!menu) return;
@@ -193,6 +208,18 @@ export function AgentCard({
                 {resting ? t('card.wake') : t('card.rest')}
               </button>
             )}
+            {name && (
+              <button
+                className="text-sm text-left px-10 py-6 hover:bg-btn-hover text-text whitespace-nowrap"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenu(null);
+                  setRenaming({ value: name, busy: false, err: null });
+                }}
+              >
+                {t('card.renameMenu')}
+              </button>
+            )}
             <button
               className="text-sm text-left px-10 py-6 hover:bg-btn-hover text-danger whitespace-nowrap"
               onClick={(e) => {
@@ -206,6 +233,31 @@ export function AgentCard({
           </div>,
           document.body,
         )}
+      {renaming && (
+        <Modal isOpen title={t('card.renameTitle')} onClose={() => !renaming.busy && setRenaming(null)} className="w-[420px]">
+          <div className="ide-ui flex flex-col gap-10 px-4 pb-4" onMouseDown={(e) => e.stopPropagation()}>
+            <input
+              autoFocus
+              maxLength={40}
+              className="bg-bg-dark rounded-md px-10 py-6 text-text text-[14px] outline-none focus:ring-1 focus:ring-accent"
+              value={renaming.value}
+              disabled={renaming.busy}
+              onChange={(e) => setRenaming({ ...renaming, value: e.target.value })}
+              onKeyDown={(e) => e.key === 'Enter' && void submitRename()}
+            />
+            <span className="t-desc">{t('card.renameHelp')}</span>
+            {renaming.err && <span className="text-status-error text-[12px]">{renaming.err}</span>}
+            <div className="flex justify-end gap-8">
+              <Button variant="ghost" size="md" disabled={renaming.busy} onClick={() => setRenaming(null)}>
+                {t('common.cancel')}
+              </Button>
+              <Button variant="accent" size="md" disabled={renaming.busy || !renaming.value.trim() || renaming.value.trim() === name} onClick={() => void submitRename()}>
+                {renaming.busy ? t('settings.name.renaming') : t('settings.name.rename')}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {confirmClose && (
         <ConfirmModal
           title={t('card.removeTitle')}

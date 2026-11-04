@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { notify } from '../notifications.js';
 
 import { TERMINAL_SIDEBAR_WIDTH_PX } from '../constants.js';
+import { AGENT_RENAMED_EVENT } from '../renameAgent.js';
 import { useT } from '../i18n/index.js';
 import type { AgentAppearance, TabStatus } from './AgentCard.js';
 import { AgentCard } from './AgentCard.js';
@@ -119,6 +120,17 @@ export function AgentCardBar({
   const [order, setOrder] = useState<SavedOrder>(() => readJson<SavedOrder>(ORDER_KEY, {}));
   const [groupOrder, setGroupOrder] = useState<string[]>(() => readJson<string[]>(GROUP_ORDER_KEY, []));
   const [pinned, setPinned] = useState<string[]>(() => readJson<string[]>(PINNED_KEY, []));
+  // Renombrado desde la ficha: fijados y orden siguen al nombre nuevo.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const { from, to } = (e as CustomEvent<{ from: string; to: string }>).detail;
+      const swap = (n: string) => (n === from ? to : n);
+      setPinned((p) => p.map(swap));
+      setOrder((o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v.map(swap)])));
+    };
+    window.addEventListener(AGENT_RENAMED_EVENT, on);
+    return () => window.removeEventListener(AGENT_RENAMED_EVENT, on);
+  }, []);
   const [drag, setDrag] = useState<{ id: number; group: string; ids: number[] } | null>(null);
   const [groupDrag, setGroupDrag] = useState<{ key: string; keys: string[] } | null>(null);
   const cardRefs = useRef(new Map<number, HTMLDivElement>());

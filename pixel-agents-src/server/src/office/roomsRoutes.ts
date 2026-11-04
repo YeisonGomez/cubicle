@@ -150,8 +150,23 @@ export function registerRoomsRoutes(app: FastifyInstance, options: HttpServerOpt
     options.store.broadcast({ type: 'directoriesLoaded', directories: listDirectories([hostDirectory()]) });
     options.store.broadcast({ type: 'areaMappingsLoaded', mappings: cfg.standalone.areaMappings });
     let relayout: string | null = null;
-    if (room && desksFor(inRoom()) !== before) relayout = (await runProyecto(options, ['aplicar'])).log.trim().split('\n').pop() ?? null;
-    return reply.send({ ok: true, removed: name, relayout });
+    // Era el último agente de su oficina: la oficina (sala, letrero) también se quita.
+    let roomRemoved = false;
+    if (room && inRoom() === 0) {
+      const ofPath = path.join(officeDir(), 'oficinas.json');
+      try {
+        const of = JSON.parse(fs.readFileSync(ofPath, 'utf8')) as { salas?: Array<{ label: string }> };
+        if (of.salas?.some((x) => x.label === room)) {
+          of.salas = of.salas.filter((x) => x.label !== room);
+          fs.writeFileSync(ofPath, JSON.stringify(of, null, 2));
+          roomRemoved = true;
+        }
+      } catch {
+        /* sin oficinas.json */
+      }
+    }
+    if (room && (roomRemoved || desksFor(inRoom()) !== before)) relayout = (await runProyecto(options, ['aplicar'])).log.trim().split('\n').pop() ?? null;
+    return reply.send({ ok: true, removed: name, roomRemoved: roomRemoved ? room : null, relayout });
   });
 
   // Renombrar un agente (Directorio): config, salas, capacidades y actividad; su
@@ -195,6 +210,15 @@ export function registerRoomsRoutes(app: FastifyInstance, options: HttpServerOpt
       const deps = launchDeps(options);
       if (deps) {
         const live = [...options.store.values()].filter((a) => !a.isExternal && a.directoryName === from && deps.ptyManager.has(a.id));
+        // Claude Code también renombra la conversación (/rename): el nombre queda en el transcript y sobrevive al reanudar.
+        for (const a of live) {
+          const pty = deps.ptyManager.get(a.id);
+          if (!pty) continue;
+          pty.write(`/rename ${to}`);
+          await new Promise<void>((r) => setTimeout(r, 250));
+          pty.write('\r');
+        }
+        if (live.length > 0) await new Promise<void>((r) => setTimeout(r, 1500));
         for (const a of live) options.runtime?.closeAgent(a.id);
         if (live.length > 0) {
           await new Promise<void>((r) => setTimeout(r, 800));
