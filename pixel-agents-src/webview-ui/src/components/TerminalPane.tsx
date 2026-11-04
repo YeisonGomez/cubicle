@@ -196,6 +196,28 @@ export function TerminalPane({
       resizeTimer = setTimeout(applyFit, TERMINAL_RESIZE_DEBOUNCE_MS);
     };
 
+    // Rueda hacia abajo que no llega al final: con un TUI que repinta sin parar,
+    // el área de scroll de xterm queda desfasada del buffer y el scroll nativo
+    // topa antes de la última línea. Si el scroll del DOM ya está al tope (o
+    // faltan ≤3 líneas), se pega al final por el buffer.
+    let wheelFrame: number | null = null;
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY <= 0) return;
+      if (wheelFrame !== null) cancelAnimationFrame(wheelFrame);
+      wheelFrame = requestAnimationFrame(() => {
+        wheelFrame = null;
+        const b = term.buffer.active;
+        if (b.viewportY >= b.baseY) return;
+        const vp = host.querySelector<HTMLElement>('.xterm-viewport');
+        const domAtEnd = vp ? vp.scrollTop + vp.clientHeight >= vp.scrollHeight - 2 : false;
+        if (domAtEnd || b.baseY - b.viewportY <= 3) {
+          term.scrollToBottom();
+          syncBottom();
+        }
+      });
+    };
+    host.addEventListener('wheel', onWheel, { passive: true, capture: true });
+
     const observer = new ResizeObserver(scheduleFit);
     observer.observe(host);
     applyFit();
@@ -203,6 +225,8 @@ export function TerminalPane({
     return () => {
       if (resizeTimer) clearTimeout(resizeTimer);
       if (verifyFrame !== null) cancelAnimationFrame(verifyFrame);
+      if (wheelFrame !== null) cancelAnimationFrame(wheelFrame);
+      host.removeEventListener('wheel', onWheel, { capture: true });
       detachTouch();
       detachClipboard();
       observer.disconnect();
