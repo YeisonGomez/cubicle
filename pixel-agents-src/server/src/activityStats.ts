@@ -389,6 +389,13 @@ export function tokenUsageByDir(dirs: Array<{ name: string; path: string }>, fil
   });
 }
 
+/** Prompts humanos por día de cada Directorio, con la historia guardada. */
+export function promptDaysByDir(dirs: Array<{ name: string; path: string }>, file: string): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {};
+  for (const { name, merged } of persistedPerDir(dirs, file)) out[name] = merged.days;
+  return out;
+}
+
 export function persistedActivityStats(dirs: Array<{ name: string; path: string }>, file: string): ActivityStats {
   const per = persistedPerDir(dirs, file);
   const live = per.map((x) => x.live);

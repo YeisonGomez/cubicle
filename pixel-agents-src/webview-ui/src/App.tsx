@@ -25,7 +25,7 @@ import { Modal } from './components/ui/Modal.js';
 import { UsageBadge } from './components/UsageBadge.js';
 import { VersionIndicator } from './components/VersionIndicator.js';
 import { ZoomControls } from './components/ZoomControls.js';
-import { OFFICE_CANVAS_TEST_ID } from './constants.js';
+import { OFFICE_CANVAS_TEST_ID, SKIN_POLL_MS } from './constants.js';
 import { useDirectoryEditor } from './hooks/useDirectoryEditor.js';
 import { useEditorActions } from './hooks/useEditorActions.js';
 import { useEditorKeyboard } from './hooks/useEditorKeyboard.js';
@@ -40,6 +40,7 @@ import { useRoomPanel } from './hooks/useRoomPanel.js';
 import { useTerminalDrawer } from './hooks/useTerminalDrawer.js';
 import { MobileShell } from './mobile/MobileShell.js';
 import { useMobileShell } from './mobile/useMobileShell.js';
+import { EvolutionOverlay } from './components/EvolutionOverlay.js';
 import { OfficeCanvas } from './office/components/OfficeCanvas.js';
 import { ToolOverlay } from './office/components/ToolOverlay.js';
 import { EditorState } from './office/editor/editorState.js';
@@ -366,6 +367,9 @@ function App() {
   const skin = useSkin();
   useEffect(() => {
     void loadSkin();
+    // Niveles y evoluciones avanzan con los prompts.
+    const id = setInterval(() => void loadSkin(), SKIN_POLL_MS);
+    return () => clearInterval(id);
   }, []);
   // Agentes nuevos (o renombrados) aún sin Pokémon: el servidor los sortea al pedir el skin.
   const skinAsked = useRef(new Set<string>());
@@ -624,6 +628,8 @@ function App() {
         activeAreaLabel={activeAreaLabel}
         tapSelectsFirst={isMobile}
       />
+
+      <EvolutionOverlay getOfficeState={getOfficeState} panRef={editor.panRef} paused={editor.isEditMode} />
 
       {!isDebugMode ? (
         <>

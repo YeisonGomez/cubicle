@@ -560,3 +560,13 @@ export const VISUAL_VIEWPORT_FULL_EPSILON_PX = 1;
  *  (with an editable focused) = the software keyboard is up. Well above an
  *  address bar collapsing (~56 px), well below any on-screen keyboard. */
 export const KEYBOARD_MIN_HEIGHT_PX = 150;
+
+// Evolución Pokémon (duración total: unos 8 s)
+export const EVOLUTION_CHECK_MS = 2000;
+export const EVOLUTION_INTRO_MS = 1200;
+export const EVOLUTION_FLICKER_MS = 4400;
+export const EVOLUTION_FLASH_MS = 400;
+export const EVOLUTION_DONE_MS = 2500;
+export const EVOLUTION_SWAPS = 26;
+export const EVOLUTION_SPRITE_PX = 192;
+export const SKIN_POLL_MS = 30000;

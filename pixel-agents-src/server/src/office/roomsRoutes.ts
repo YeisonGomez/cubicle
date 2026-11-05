@@ -18,6 +18,7 @@ import { officeDir, scriptsDir, activityFile, capabilitiesFile } from '../office
 import { killStrayOfficeClaude, relaunchAll } from '../terminal/relaunch.js';
 import { launchStandaloneAgent } from '../terminal/standaloneAgentLauncher.js';
 import { bearerAuth, desksFor, HOME, insideHome, launchDeps, runProyecto, writePromptToAgent } from './shared.js';
+import { renameSkinAgent } from './skinRoutes.js';
 
 interface RoomInfo {
   label: string;
@@ -204,6 +205,7 @@ export function registerRoomsRoutes(app: FastifyInstance, options: HttpServerOpt
           /* sin archivo todavía */
         }
       }
+      renameSkinAgent(from, to);
       options.store.broadcast({ type: 'directoriesLoaded', directories: listDirectories([hostDirectory()]) });
       options.store.broadcast({ type: 'areaMappingsLoaded', mappings: cfg.standalone.areaMappings });
       let launched: unknown = null;
