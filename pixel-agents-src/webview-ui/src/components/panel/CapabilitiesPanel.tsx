@@ -29,7 +29,7 @@ function fmtDate(ms: number | null): string {
 function Chip({ label, color, title, muted, icon }: { label: string; color?: string; title?: string; muted?: boolean; icon?: React.ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center gap-6 border-2 border-border px-8 py-3 text-[12px] leading-tight ${muted ? 'text-text-muted' : 'text-text'}`}
+      className={`inline-flex items-center gap-6 border-2 border-border px-8 py-3 text-[12px] leading-tight [&:has(svg)>span]:hidden ${muted ? 'text-text-muted' : 'text-text'}`}
       title={title}
     >
       {color && <span className="inline-block w-6 h-6 shrink-0" style={{ background: color }} />}
@@ -113,7 +113,7 @@ export function CapabilitiesPanel({ url, title, many }: { url: string; title: st
               <Section key={g.key} title={t(g.key)} n={items.length}>
                 <div className="flex flex-wrap gap-4">
                   {items.map((r) => (
-                    <Chip key={r.nombre} label={r.nombre} color={g.color} title={[r.detalle, who(r.agentes)].filter(Boolean).join(' · ')} />
+                    <Chip key={r.nombre} label={r.nombre} color={g.color} icon={<BrandIcon name={r.nombre} />} title={[r.detalle, who(r.agentes)].filter(Boolean).join(' · ')} />
                   ))}
                 </div>
               </Section>

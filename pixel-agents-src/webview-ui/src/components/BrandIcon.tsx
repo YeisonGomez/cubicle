@@ -20,10 +20,10 @@ const ALIASES: Record<string, string> = {
   drive: 'googledrive',
   calendar: 'googlecalendar',
   sheets: 'googlesheets',
-  docs: 'googledocs',
   gcp: 'googlecloud',
   gcloud: 'googlecloud',
   postgres: 'postgresql',
+  atlas: 'mongodb',
   mongo: 'mongodb',
   node: 'nodedotjs',
   nodejs: 'nodedotjs',
@@ -31,9 +31,13 @@ const ALIASES: Record<string, string> = {
   safari: 'safari',
   k8s: 'kubernetes',
   gh: 'github',
+  gemini: 'googlegemini',
+  gke: 'kubernetes',
+  vertex: 'googlegemini',
+  cloudbuild: 'googlecloud',
 };
-// Palabras genéricas que se quitan al final ("Docker Desktop", "AWS API", "MongoDB Compass").
-const GENERIC = ['desktop', 'compass', 'connect', 'api', 'mcp', 'app', 'server', 'cli', 'web'];
+// Palabras comunes que también son nombre de alguna marca: solas no cuentan.
+const NOT_BRANDS = new Set(['api', 'cloud', 'mail', 'alto', 'ip', 'web', 'app', 'server', 'docs', 'data', 'preview', 'terminal']);
 
 let index: Map<string, SimpleIcon> | null = null;
 let loading: Promise<Map<string, SimpleIcon>> | null = null;
@@ -65,12 +69,16 @@ function norm(s: string): string {
     .replace(/[^a-z0-9]/g, '');
 }
 
+/** Busca el nombre completo y luego sus primeras palabras, de más a menos ("Mongo Atlas prod" → mongo). */
 export function findBrand(name: string, m: Map<string, SimpleIcon>): SimpleIcon | null {
-  const words = name.toLowerCase().split(/[\s_\-]+/).filter(Boolean);
-  while (words.length > 1 && GENERIC.includes(words[words.length - 1])) words.pop();
-  for (const cand of [name, words.join(' ')]) {
-    const n = norm(cand);
-    const hit = m.get(ALIASES[n] ?? n) ?? m.get(n.replace(/dot/g, ''));
+  const words = name
+    .replace(/\(.*?\)/g, ' ')
+    .split(/[\s_/\-]+/)
+    .filter(Boolean);
+  for (let n = words.length; n > 0; n--) {
+    const key = norm(words.slice(0, n).join(' '));
+    if (!key || (n === 1 && NOT_BRANDS.has(key))) continue;
+    const hit = m.get(ALIASES[key] ?? key) ?? m.get(key.replace(/dot/g, ''));
     if (hit) return hit;
   }
   return null;
