@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { BrandIcon } from '../BrandIcon.js';
 import { locale, useT } from '../../i18n/index.js';
 import { apiHeaders } from '../FolderPicker.js';
 
@@ -25,13 +26,14 @@ function fmtDate(ms: number | null): string {
   return new Date(ms).toLocaleDateString(locale(), { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-function Chip({ label, color, title, muted }: { label: string; color?: string; title?: string; muted?: boolean }) {
+function Chip({ label, color, title, muted, icon }: { label: string; color?: string; title?: string; muted?: boolean; icon?: React.ReactNode }) {
   return (
     <span
       className={`inline-flex items-center gap-6 border-2 border-border px-8 py-3 text-[12px] leading-tight ${muted ? 'text-text-muted' : 'text-text'}`}
       title={title}
     >
       {color && <span className="inline-block w-6 h-6 shrink-0" style={{ background: color }} />}
+      {icon}
       {label}
     </span>
   );
@@ -127,6 +129,7 @@ export function CapabilitiesPanel({ url, title, many }: { url: string; title: st
               key={m.name}
               label={m.count > 0 ? `${m.name} ×${m.count}` : m.name}
               muted={!m.declarado}
+              icon={<BrandIcon name={m.name} />}
               title={[m.declarado ? t('caps.declaredBy') : t('caps.detectedIn'), who(m.agentes)].filter(Boolean).join(' · ')}
             />
           ))}
@@ -136,7 +139,7 @@ export function CapabilitiesPanel({ url, title, many }: { url: string; title: st
       <Section title={t('caps.apps')} n={caps.apps.length}>
         <div className="flex flex-wrap gap-4">
           {caps.apps.map((a) => (
-            <Chip key={a.name} label={a.name} title={who(a.agentes)} />
+            <Chip key={a.name} label={a.name} title={who(a.agentes)} icon={<BrandIcon name={a.name} />} />
           ))}
         </div>
       </Section>
