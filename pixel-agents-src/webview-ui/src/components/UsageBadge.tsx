@@ -10,8 +10,8 @@ interface Usage {
   seven_day: { used_percentage?: number; resets_at?: number } | null;
   rate_limits?: Record<string, { used_percentage?: number; resets_at?: number } | null> | null;
   plan?: { name: string | null; type: string | null; tier: string | null } | null;
-  /** Límite de Fable agotado, según el aviso de Claude Code. */
-  fable?: { exhausted: boolean; reachedAt: number };
+  /** Cuánto queda de Fable (límite aparte) y de dónde sale el dato. */
+  fable?: { remaining: number | null; source: 'notice' | 'cache' | 'unused' | null; at: number | null };
   model: string | null;
   updatedAt: number;
 }
@@ -30,38 +30,21 @@ function fmtReset(ts?: number, withDay = false): string {
     : d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 }
 
-/** Reparto del uso por modelo (tokens de salida de la semana): partes de la barra, no límites aparte. */
-interface Split { fable: number; other: number }
-const FABLE_COLOR = '#8b7bff';
-
-function Meter({ label, pct, reset, split }: { label: string; pct: number; reset: string; split?: Split | null }) {
+/** Cuánto queda de un límite: la barra se vacía a medida que se gasta. */
+function Meter({ label, used, reset, title }: { label: string; used: number | null; reset: string; title?: string }) {
   const { t } = useT();
-  const c = colorFor(pct);
+  const left = used === null ? null : Math.max(0, 100 - used);
+  const c = used === null ? undefined : colorFor(used);
   const resetTxt = reset ? t('usage.resets', { t: reset }) : '';
-  const title = split
-    ? t('usage.weekSplitTitle', { pct, f: Math.round((pct * split.fable) / 100), o: Math.round((pct * split.other) / 100), fs: Math.round(split.fable), os: Math.round(split.other), reset: resetTxt })
-    : t('usage.meterTitle', { label, pct, reset: resetTxt });
   return (
-    <div className="flex items-center gap-6" title={title}>
+    <div className="flex items-center gap-6" title={title ?? t('usage.meterTitle', { label, pct: left ?? 0, reset: resetTxt })}>
       <span className="text-text-muted text-[11px] uppercase tracking-wide">{label}</span>
       <span className="relative inline-flex w-[80px] h-[8px] bg-bg border border-border overflow-hidden">
-        {split ? (
-          <>
-            <span className="h-full" style={{ width: `${(Math.min(100, pct) * split.fable) / 100}%`, background: FABLE_COLOR }} />
-            <span className="h-full" style={{ width: `${(Math.min(100, pct) * split.other) / 100}%`, background: c }} />
-          </>
-        ) : (
-          <span className="absolute inset-y-0 left-0" style={{ width: `${Math.min(100, pct)}%`, background: c }} />
-        )}
+        {left !== null && <span className="absolute inset-y-0 left-0" style={{ width: `${left}%`, background: c }} />}
       </span>
-      <span className="text-[12px] font-semibold" style={{ color: c }}>
-        {pct}%
+      <span className="text-[12px] font-semibold text-text-muted" style={{ color: c }}>
+        {left === null ? t('usage.unknown') : t('usage.left', { pct: left })}
       </span>
-      {split && (
-        <span className="text-[11px] text-text-muted">
-          {t('usage.tokens')}: <span style={{ color: FABLE_COLOR }}>Fable {Math.round(split.fable)}%</span> · {t('usage.others')} {Math.round(split.other)}%
-        </span>
-      )}
       {reset && <span className="text-text-muted text-[11px]">↻ {reset}</span>}
     </div>
   );
@@ -74,31 +57,6 @@ export function UsageBadge({ working }: { working: number }) {
   const { t } = useT();
   const [usage, setUsage] = useState<Usage | null>(null);
   const [showTokens, setShowTokens] = useState(false);
-  const [split, setSplit] = useState<Split | null>(null);
-  // Reparto Fable / otros modelos de la semana (el servidor lo cachea 5 min).
-  useEffect(() => {
-    let alive = true;
-    const load = () =>
-      fetch('./api/usage/models?days=7', { cache: 'no-store' })
-        .then(async (r) => (r.ok ? ((await r.json()) as { models: Array<{ model: string; output: number }> }) : null))
-        .then((d) => {
-          if (!alive || !d) return;
-          let f = 0;
-          let o = 0;
-          for (const m of d.models) {
-            if (/^claude-fable/.test(m.model)) f += m.output;
-            else o += m.output;
-          }
-          setSplit(f + o > 0 ? { fable: (f / (f + o)) * 100, other: (o / (f + o)) * 100 } : null);
-        })
-        .catch(() => undefined);
-    void load();
-    const id = window.setInterval(() => void load(), 300_000);
-    return () => {
-      alive = false;
-      window.clearInterval(id);
-    };
-  }, []);
   useEffect(() => {
     let alive = true;
     const load = () =>
@@ -121,23 +79,34 @@ export function UsageBadge({ working }: { working: number }) {
   return (
     <div className="ide-ui flex items-center gap-16">
       <span className={`flex items-center gap-16 ${stale ? 'opacity-50' : ''}`} title={stale ? t('usage.stale') : undefined}>
-        {usage && typeof day === 'number' && <Meter label={t('usage.session')} pct={Math.round(day)} reset={fmtReset(usage.five_hour?.resets_at)} />}
+        {usage && typeof day === 'number' && <Meter label={t('usage.session')} used={Math.round(day)} reset={fmtReset(usage.five_hour?.resets_at)} />}
         {usage?.plan?.name && (
           <span className="text-[11px] uppercase tracking-wide text-accent-bright" title={t('usage.planTitle', { p: usage.plan.name })}>
             {usage.plan.name}
           </span>
         )}
-        {typeof week === 'number' && <Meter label={t('usage.week')} pct={Math.round(week)} reset={fmtReset(usage?.seven_day?.resets_at, true)} split={split} />}
-        {usage?.fable?.exhausted && (
-          <span className="text-[12px] font-semibold" style={{ color: COLORS.bad }} title={t('usage.fableOutTitle', { t: fmtReset(usage.fable.reachedAt / 1000, true) })}>
-            {t('usage.fableOut')}
-          </span>
+        {typeof week === 'number' && <Meter label={t('usage.week')} used={Math.round(week)} reset={fmtReset(usage?.seven_day?.resets_at, true)} />}
+        {usage?.fable && (
+          <Meter
+            label="Fable"
+            used={usage.fable.remaining === null ? null : 100 - usage.fable.remaining}
+            reset=""
+            title={
+              usage.fable.source === 'notice'
+                ? t('usage.fableNotice', { t: fmtReset((usage.fable.at ?? 0) / 1000, true) })
+                : usage.fable.source === 'cache'
+                  ? t('usage.fableCache', { t: fmtReset((usage.fable.at ?? 0) / 1000, true) })
+                  : usage.fable.source === 'unused'
+                    ? t('usage.fableUnused')
+                    : t('usage.fableUnknown')
+            }
+          />
         )}
         {/* Ventanas por modelo (seven_day_<modelo>) si Claude Code llega a enviarlas; hoy solo envía la semanal total. */}
         {Object.entries(usage?.rate_limits ?? {})
           .filter(([k, v]) => /^seven_day_./.test(k) && typeof v?.used_percentage === 'number')
           .map(([k, v]) => (
-            <Meter key={k} label={`${t('usage.week')} ${k.slice(9)}`} pct={Math.round(v!.used_percentage!)} reset="" />
+            <Meter key={k} label={`${t('usage.week')} ${k.slice(9)}`} used={Math.round(v!.used_percentage!)} reset="" />
           ))}
       </span>
       {working > 0 && (

@@ -10,7 +10,7 @@ import * as os from 'os';
 import { persistedActivityStats, tokenUsageByDir, totalTokens, windowedHours } from '../activityStats.js';
 import { transcriptLastActivity } from '../agentProjects.js';
 import { capabilitiesFor } from '../capabilities.js';
-import { fableExhausted, fableLimitState, usageByModel } from '../modelUsage.js';
+import { fableLeft, fableLimitState, usageByModel } from '../modelUsage.js';
 import { clearCapabilities } from '../capabilitiesPrompt.js';
 import { readConfig } from '../configPersistence.js';
 import type { HttpServerOptions } from '../httpServer.js';
@@ -27,6 +27,21 @@ function claudePlan(): { name: string | null; type: string | null; tier: string 
     if (!a) return null;
     const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
     return { name: str(a.planDisplayName), type: str(a.organizationType), tier: str(a.organizationRateLimitTier) ?? str(a.userRateLimitTier) };
+  } catch {
+    return null;
+  }
+}
+
+/** Límite de Fable del caché de uso de Claude Code. Solo se leen estos campos, sin datos de la cuenta. */
+function cachedFableLimit(): { percent: number; resetsAt: number; fetchedAt: number } | null {
+  try {
+    const d = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8')) as {
+      cachedUsageUtilization?: { fetchedAtMs?: number; utilization?: { limits?: Array<{ percent?: number; resets_at?: string; scope?: { model?: { display_name?: string } } | null }> } };
+    };
+    const c = d.cachedUsageUtilization;
+    const l = c?.utilization?.limits?.find((x) => /fable/i.test(x.scope?.model?.display_name ?? ''));
+    if (!l || typeof l.percent !== 'number' || !l.resets_at || !c?.fetchedAtMs) return null;
+    return { percent: l.percent, resetsAt: Date.parse(l.resets_at), fetchedAt: c.fetchedAtMs };
   } catch {
     return null;
   }
@@ -167,8 +182,7 @@ export function registerStatsRoutes(app: FastifyInstance, options: HttpServerOpt
   app.get('/api/usage', async () => {
     try {
       const u = JSON.parse(fs.readFileSync(usageFile(), 'utf8')) as Record<string, unknown> & { seven_day?: { resets_at?: number } | null };
-      const { reachedAt, lastReplyAt } = fableLimitState();
-      return { ...u, plan: claudePlan(), fable: { exhausted: fableExhausted(reachedAt, lastReplyAt, u.seven_day?.resets_at, Date.now()), reachedAt } };
+      return { ...u, plan: claudePlan(), fable: fableLeft({ ...fableLimitState(), resetsAt: u.seven_day?.resets_at, cached: cachedFableLimit() }, Date.now()) };
     } catch {
       return null;
     }

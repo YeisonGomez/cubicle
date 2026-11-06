@@ -2,8 +2,7 @@
  * Uso por modelo en una ventana de días, leído de TODOS los transcripts de Claude
  * Code (~/.claude/projects, subagentes incluidos): el límite semanal es de la cuenta,
  * no solo de la oficina. Da la proporción real de tokens de cada modelo en la semana.
- * Claude Code no envía a la statusline el límite de Fable, que es aparte del semanal:
- * solo se sabe que se agotó por el aviso que deja en el transcript al llegar a él.
+ * También guarda el último aviso de límite de Fable y su última respuesta, para `fableLeft`.
  * Cada respuesta se cuenta una vez (varios registros comparten message.id).
  */
 import * as fs from 'fs';
@@ -26,15 +25,31 @@ const WEEK_S = 7 * 86_400;
 /** Último aviso de límite de Fable y última respuesta real de Fable (ms). */
 let fableSeen: { at: number; reachedAt: number; lastReplyAt: number } | null = null;
 
+export interface FableLeft {
+  /** Porcentaje que queda; null si no se puede saber. */
+  remaining: number | null;
+  /** De dónde sale: aviso de límite, caché de Claude Code o sin uso desde el reinicio. */
+  source: 'notice' | 'cache' | 'unused' | null;
+  /** Cuándo se obtuvo el dato o llegó el aviso (ms). */
+  at: number | null;
+}
+
 /**
- * ¿Sigue agotado Fable? Hay aviso sin respuestas de Fable después y es de la ventana semanal
- * actual. Al pasar el reinicio deja de mostrarse; si sigue agotado, el próximo intento deja
- * otro aviso, que ya es de la ventana nueva. Tiempos en ms; `resetsAt`, en segundos.
+ * Cuánto queda de Fable, que tiene un límite aparte con el mismo reinicio que el semanal.
+ * Nunca da por bueno un dato de una ventana anterior. Tiempos en ms; `resetsAt` (el reinicio
+ * semanal), en segundos.
  */
-export function fableExhausted(reachedAt: number, lastReplyAt: number, resetsAt: number | undefined, now: number): boolean {
-  if (!reachedAt || lastReplyAt > reachedAt) return false;
-  if (!resetsAt) return now - reachedAt < WEEK_S * 1000;
-  return now < resetsAt * 1000 && reachedAt >= (resetsAt - WEEK_S) * 1000;
+export function fableLeft(
+  o: { reachedAt: number; lastReplyAt: number; resetsAt?: number; cached?: { percent: number; resetsAt: number; fetchedAt: number } | null },
+  now: number,
+): FableLeft {
+  const windowStart = o.resetsAt ? (o.resetsAt - WEEK_S) * 1000 : now - WEEK_S * 1000;
+  const inWindow = !o.resetsAt || now < o.resetsAt * 1000;
+  if (o.reachedAt && o.reachedAt >= o.lastReplyAt && o.reachedAt >= windowStart && inWindow) return { remaining: 0, source: 'notice', at: o.reachedAt };
+  const c = o.cached;
+  if (c && c.resetsAt > now && c.fetchedAt >= windowStart) return { remaining: Math.max(0, 100 - c.percent), source: 'cache', at: c.fetchedAt };
+  if (o.resetsAt && inWindow && o.lastReplyAt < windowStart) return { remaining: 100, source: 'unused', at: null };
+  return { remaining: null, source: null, at: null };
 }
 
 /** Aviso y última respuesta de Fable de la última semana (se recalcula como mucho cada 5 min). */
