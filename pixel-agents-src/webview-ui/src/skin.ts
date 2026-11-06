@@ -21,15 +21,29 @@ export interface AgentSkin {
   evolving?: { fromName: string; from: string; toName: string; to: string; stage: number };
 }
 
+/** Progreso del agente en el tema clásico: nivel, experiencia y rango (índice de RANK_KEYS). */
+export interface AgentRank {
+  level: number;
+  xp: number;
+  levelXp: number;
+  nextXp: number;
+  rank: number;
+  nextRankAt: number | null;
+  promoted?: { rank: number };
+}
+
+export const RANK_KEYS = ['rank.intern', 'rank.junior', 'rank.mid', 'rank.senior', 'rank.lead', 'rank.principal', 'rank.partner'] as const;
+
 export interface SkinState {
   theme: 'classic' | 'pokemon';
   types: Array<{ id: string; es: string; en: string; color: string }>;
   rooms: Record<string, string>;
   agents: Record<string, AgentSkin>;
+  ranks: Record<string, AgentRank>;
 }
 
 let lastLoaded = '';
-let current: SkinState = { theme: 'classic', types: [], rooms: {}, agents: {} };
+let current: SkinState = { theme: 'classic', types: [], rooms: {}, agents: {}, ranks: {} };
 const listeners = new Set<() => void>();
 function emit(): void {
   listeners.forEach((f) => f());
@@ -65,6 +79,19 @@ export async function updateSkin(body: { theme?: 'classic' | 'pokemon'; rooms?: 
 export async function ackEvolution(agent: string, stage: number): Promise<void> {
   try {
     const r = await fetch('./api/skin/evolved', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ agent, stage }) });
+    if (r.ok) {
+      current = (await r.json()) as SkinState;
+      emit();
+    }
+  } catch {
+    /* se reintenta con la próxima carga */
+  }
+}
+
+/** La animación de ascenso ya se mostró. */
+export async function ackPromotion(agent: string, rank: number): Promise<void> {
+  try {
+    const r = await fetch('./api/skin/promoted', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ agent, rank }) });
     if (r.ok) {
       current = (await r.json()) as SkinState;
       emit();

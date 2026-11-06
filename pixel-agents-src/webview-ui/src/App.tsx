@@ -41,6 +41,7 @@ import { useTerminalDrawer } from './hooks/useTerminalDrawer.js';
 import { MobileShell } from './mobile/MobileShell.js';
 import { useMobileShell } from './mobile/useMobileShell.js';
 import { EvolutionOverlay } from './components/EvolutionOverlay.js';
+import { PromotionOverlay } from './components/PromotionOverlay.js';
 import { OfficeCanvas } from './office/components/OfficeCanvas.js';
 import { ToolOverlay } from './office/components/ToolOverlay.js';
 import { EditorState } from './office/editor/editorState.js';
@@ -630,6 +631,7 @@ function App() {
       />
 
       <EvolutionOverlay getOfficeState={getOfficeState} panRef={editor.panRef} paused={editor.isEditMode} />
+      <PromotionOverlay getOfficeState={getOfficeState} panRef={editor.panRef} paused={editor.isEditMode} />
 
       {!isDebugMode ? (
         <>

@@ -6,6 +6,7 @@ import { useT } from '../i18n/index.js';
 import { playDoneSound } from '../notificationSound.js';
 import type { OfficeState } from '../office/engine/officeState.js';
 import { ackEvolution, getSkin, type AgentSkin } from '../skin.js';
+import { spotlightAgent } from './spotlightAgent.js';
 
 type Evolving = NonNullable<AgentSkin['evolving']> & { agent: string };
 type Phase = 'intro' | 'flicker' | 'flash' | 'done';
@@ -55,10 +56,7 @@ export function EvolutionOverlay({ getOfficeState, panRef, paused }: { getOffice
   useEffect(() => {
     if (!current) return;
     const os = getOfficeState();
-    const ch = [...os.characters.values()].find((c) => c.directoryName === current.agent && !c.isSubagent);
-    const prevFollow = os.cameraFollowId;
-    const prevPan = { ...panRef.current };
-    if (ch) os.cameraFollowId = ch.id;
+    const restore = spotlightAgent(os, panRef, current.agent);
     let raf = 0;
     let cancelled = false;
     setPhase('intro');
@@ -96,8 +94,7 @@ export function EvolutionOverlay({ getOfficeState, panRef, paused }: { getOffice
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf);
-      os.cameraFollowId = prevFollow;
-      panRef.current = prevPan; // la vista vuelve a donde estaba
+      restore();
     };
   }, [current, getOfficeState, panRef]);
 

@@ -563,6 +563,8 @@ export const KEYBOARD_MIN_HEIGHT_PX = 150;
 
 // Evolución Pokémon (duración total: unos 8 s)
 export const EVOLUTION_CHECK_MS = 2000;
+export const PROMOTION_MS = 5000;
+export const PROMOTION_CONFETTI = 48;
 export const EVOLUTION_INTRO_MS = 1200;
 export const EVOLUTION_FLICKER_MS = 4400;
 export const EVOLUTION_FLASH_MS = 400;

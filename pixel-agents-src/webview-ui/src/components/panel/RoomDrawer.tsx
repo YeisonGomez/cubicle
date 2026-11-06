@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n/index.js';
 import { IconClaude } from '../icons.js';
 import { IconButton } from '../ui/IconButton.js';
-import { PokemonLevel } from './PokemonLevel.js';
+import { AgentLevel } from './AgentLevel.js';
 import { ActivityPanel } from './ActivityPanel.js';
 import { AgentSettingsForm } from './AgentSettingsForm.js';
 import type { AgentInfo, PanelTarget } from './api.js';
@@ -199,7 +199,7 @@ export function RoomDrawer({ target, color, onClose, onRenamed, onRenaming }: Ro
             {subtitleNode ?? subtitle}
           </div>
         </div>
-        {agentName && <PokemonLevel name={agentName} />}
+        {agentName && <AgentLevel name={agentName} />}
         <IconButton label={t('panel.home')} active={HOME_TABS.includes(tab)} onClick={() => setTab(home)}>
           <Home size={16} />
         </IconButton>

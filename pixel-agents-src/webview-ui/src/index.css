@@ -345,6 +345,27 @@
   }
 }
 
+@keyframes confetti-fall {
+  from {
+    transform: translateY(-10vh) rotate(0deg);
+  }
+  to {
+    transform: translateY(110vh) rotate(540deg);
+  }
+}
+.confetti {
+  position: absolute;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  animation: confetti-fall linear both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .confetti {
+    display: none;
+  }
+}
+
 @keyframes pixel-pulse {
   0%,
   100% {
