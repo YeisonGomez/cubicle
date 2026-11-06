@@ -30,20 +30,19 @@ function fmtReset(ts?: number, withDay = false): string {
     : d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 }
 
-/** Cuánto queda de un límite: la barra se vacía a medida que se gasta. */
+/** Cuánto se ha consumido de un límite; sin dato, la barra queda vacía. */
 function Meter({ label, used, reset, title }: { label: string; used: number | null; reset: string; title?: string }) {
   const { t } = useT();
-  const left = used === null ? null : Math.max(0, 100 - used);
   const c = used === null ? undefined : colorFor(used);
   const resetTxt = reset ? t('usage.resets', { t: reset }) : '';
   return (
-    <div className="flex items-center gap-6" title={title ?? t('usage.meterTitle', { label, pct: left ?? 0, reset: resetTxt })}>
+    <div className="flex items-center gap-6" title={title ?? t('usage.meterTitle', { label, pct: used ?? 0, reset: resetTxt })}>
       <span className="text-text-muted text-[11px] uppercase tracking-wide">{label}</span>
       <span className="relative inline-flex w-[80px] h-[8px] bg-bg border border-border overflow-hidden">
-        {left !== null && <span className="absolute inset-y-0 left-0" style={{ width: `${left}%`, background: c }} />}
+        {used !== null && <span className="absolute inset-y-0 left-0" style={{ width: `${Math.min(100, used)}%`, background: c }} />}
       </span>
       <span className="text-[12px] font-semibold text-text-muted" style={{ color: c }}>
-        {left === null ? t('usage.unknown') : t('usage.left', { pct: left })}
+        {used === null ? t('usage.unknown') : `${used}%`}
       </span>
       {reset && <span className="text-text-muted text-[11px]">↻ {reset}</span>}
     </div>
@@ -89,7 +88,7 @@ export function UsageBadge({ working }: { working: number }) {
         {usage?.fable && (
           <Meter
             label="Fable"
-            used={usage.fable.remaining === null ? null : 100 - usage.fable.remaining}
+            used={typeof usage.fable.remaining === 'number' ? 100 - usage.fable.remaining : null}
             reset=""
             title={
               usage.fable.source === 'notice'
