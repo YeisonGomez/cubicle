@@ -194,12 +194,12 @@ export function RoomDrawer({ target, color, onClose, onRenamed, onRenaming }: Ro
               {target.kind === 'agent' ? target.name : target.area}
             </span>
             {target.kind === 'agent' && target.area && <span className="text-text-muted text-[12px] truncate">{target.area}</span>}
-            {agentName && <PokemonLevel name={agentName} />}
           </div>
           <div className="text-text-muted text-[12px] truncate" title={subtitle}>
             {subtitleNode ?? subtitle}
           </div>
         </div>
+        {agentName && <PokemonLevel name={agentName} />}
         <IconButton label={t('panel.home')} active={HOME_TABS.includes(tab)} onClick={() => setTab(home)}>
           <Home size={16} />
         </IconButton>

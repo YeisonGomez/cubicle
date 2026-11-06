@@ -3,7 +3,7 @@ import { useSkin } from '../../skin.js';
 
 const XP_SEGMENTS = 10;
 
-/** Tema Pokémon: forma, nivel y barra de experiencia por tramos, junto al nombre en la cabecera del panel. */
+/** Tema Pokémon: forma, nivel y barra de experiencia por tramos, centrados con los botones de la cabecera del panel. */
 export function PokemonLevel({ name }: { name: string }) {
   const { t } = useT();
   const skin = useSkin();
@@ -17,7 +17,7 @@ export function PokemonLevel({ name }: { name: string }) {
   // Cuánto de la barra entera llena cada tramo: los anteriores completos, el actual en parte.
   const filled = (pct / 100) * XP_SEGMENTS;
   return (
-    <span className="ml-auto pl-8 flex items-center gap-6 self-center shrink-0 text-[12px]" title={hint}>
+    <span className="flex items-center gap-6 shrink-0 text-[12px]" title={hint}>
       <span className="text-text">{a.name}</span>
       <span className="text-text font-semibold">{t('pokemon.level', { level: a.level })}</span>
       <span className="flex gap-[2px]" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={t('pokemon.xp')}>
