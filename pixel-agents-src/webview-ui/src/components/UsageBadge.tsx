@@ -10,6 +10,8 @@ interface Usage {
   seven_day: { used_percentage?: number; resets_at?: number } | null;
   rate_limits?: Record<string, { used_percentage?: number; resets_at?: number } | null> | null;
   plan?: { name: string | null; type: string | null; tier: string | null } | null;
+  /** Límite de Fable agotado, según el aviso de Claude Code. */
+  fable?: { exhausted: boolean; reachedAt: number };
   model: string | null;
   updatedAt: number;
 }
@@ -57,7 +59,7 @@ function Meter({ label, pct, reset, split }: { label: string; pct: number; reset
       </span>
       {split && (
         <span className="text-[11px] text-text-muted">
-          <span style={{ color: FABLE_COLOR }}>Fable {Math.round(split.fable)}%</span> · {t('usage.others')} {Math.round(split.other)}%
+          {t('usage.tokens')}: <span style={{ color: FABLE_COLOR }}>Fable {Math.round(split.fable)}%</span> · {t('usage.others')} {Math.round(split.other)}%
         </span>
       )}
       {reset && <span className="text-text-muted text-[11px]">↻ {reset}</span>}
@@ -126,6 +128,11 @@ export function UsageBadge({ working }: { working: number }) {
           </span>
         )}
         {typeof week === 'number' && <Meter label={t('usage.week')} pct={Math.round(week)} reset={fmtReset(usage?.seven_day?.resets_at, true)} split={split} />}
+        {usage?.fable?.exhausted && (
+          <span className="text-[12px] font-semibold" style={{ color: COLORS.bad }} title={t('usage.fableOutTitle', { t: fmtReset(usage.fable.reachedAt / 1000, true) })}>
+            {t('usage.fableOut')}
+          </span>
+        )}
         {/* Ventanas por modelo (seven_day_<modelo>) si Claude Code llega a enviarlas; hoy solo envía la semanal total. */}
         {Object.entries(usage?.rate_limits ?? {})
           .filter(([k, v]) => /^seven_day_./.test(k) && typeof v?.used_percentage === 'number')

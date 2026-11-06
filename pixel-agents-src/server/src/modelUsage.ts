@@ -1,8 +1,9 @@
 /**
  * Uso por modelo en una ventana de días, leído de TODOS los transcripts de Claude
  * Code (~/.claude/projects, subagentes incluidos): el límite semanal es de la cuenta,
- * no solo de la oficina. Claude Code no envía a la statusline el límite por modelo,
- * así que esto da la proporción real de tokens de cada modelo en la semana.
+ * no solo de la oficina. Da la proporción real de tokens de cada modelo en la semana.
+ * Claude Code no envía a la statusline el límite de Fable, que es aparte del semanal:
+ * solo se sabe que se agotó por el aviso que deja en el transcript al llegar a él.
  * Cada respuesta se cuenta una vez (varios registros comparten message.id).
  */
 import * as fs from 'fs';
@@ -19,6 +20,31 @@ export interface ModelUsage {
 }
 
 let cache: { key: string; at: number; data: ModelUsage[] } | null = null;
+const FABLE_LIMIT = /(reached|hit) your Fable\b[^.]*\blimit/i;
+const CACHE_MS = 300_000;
+const WEEK_S = 7 * 86_400;
+/** Último aviso de límite de Fable y última respuesta real de Fable (ms). */
+let fableSeen: { at: number; reachedAt: number; lastReplyAt: number } | null = null;
+
+/**
+ * ¿Sigue agotado Fable? Hay aviso sin respuestas de Fable después y es de la ventana semanal
+ * actual. Al pasar el reinicio deja de mostrarse; si sigue agotado, el próximo intento deja
+ * otro aviso, que ya es de la ventana nueva. Tiempos en ms; `resetsAt`, en segundos.
+ */
+export function fableExhausted(reachedAt: number, lastReplyAt: number, resetsAt: number | undefined, now: number): boolean {
+  if (!reachedAt || lastReplyAt > reachedAt) return false;
+  if (!resetsAt) return now - reachedAt < WEEK_S * 1000;
+  return now < resetsAt * 1000 && reachedAt >= (resetsAt - WEEK_S) * 1000;
+}
+
+/** Aviso y última respuesta de Fable de la última semana (se recalcula como mucho cada 5 min). */
+export function fableLimitState(): { reachedAt: number; lastReplyAt: number } {
+  if (!fableSeen || Date.now() - fableSeen.at >= CACHE_MS) {
+    cache = null;
+    usageByModel(7);
+  }
+  return { reachedAt: fableSeen?.reachedAt ?? 0, lastReplyAt: fableSeen?.lastReplyAt ?? 0 };
+}
 
 function* jsonlFiles(dir: string, since: number): Generator<string> {
   let entries: fs.Dirent[];
@@ -42,11 +68,13 @@ function* jsonlFiles(dir: string, since: number): Generator<string> {
 
 export function usageByModel(days: number): ModelUsage[] {
   const key = String(days);
-  if (cache && cache.key === key && Date.now() - cache.at < 300_000) return cache.data;
+  if (cache && cache.key === key && Date.now() - cache.at < CACHE_MS) return cache.data;
   const since = Date.now() - days * 86_400_000;
   const root = path.join(os.homedir(), '.claude', 'projects');
   const seen = new Set<string>();
   const by = new Map<string, ModelUsage>();
+  let reachedAt = 0;
+  let lastReplyAt = 0;
   for (const file of jsonlFiles(root, since)) {
     let text: string;
     try {
@@ -55,6 +83,14 @@ export function usageByModel(days: number): ModelUsage[] {
       continue;
     }
     for (const line of text.split('\n')) {
+      if (line.includes('"rate_limit"') && FABLE_LIMIT.test(line)) {
+        try {
+          const r = JSON.parse(line) as { error?: string; timestamp?: string };
+          if (r.error === 'rate_limit' && r.timestamp) reachedAt = Math.max(reachedAt, Date.parse(r.timestamp));
+        } catch {
+          /* línea incompleta */
+        }
+      }
       if (!line.includes('"usage"') || !line.includes('"assistant"')) continue;
       let rec: { type?: string; timestamp?: string; message?: { id?: string; model?: string; usage?: Record<string, number> } };
       try {
@@ -65,6 +101,7 @@ export function usageByModel(days: number): ModelUsage[] {
       const m = rec.message;
       if (rec.type !== 'assistant' || !m?.usage || !m.model || m.model === '<synthetic>') continue;
       if (!rec.timestamp || Date.parse(rec.timestamp) < since) continue;
+      if (m.model.startsWith('claude-fable')) lastReplyAt = Math.max(lastReplyAt, Date.parse(rec.timestamp));
       if (m.id) {
         if (seen.has(m.id)) continue;
         seen.add(m.id);
@@ -81,5 +118,6 @@ export function usageByModel(days: number): ModelUsage[] {
   }
   const data = [...by.values()].sort((a, b) => b.output - a.output);
   cache = { key, at: Date.now(), data };
+  if (days >= 7) fableSeen = { at: Date.now(), reachedAt, lastReplyAt };
   return data;
 }

@@ -10,7 +10,7 @@ import * as os from 'os';
 import { persistedActivityStats, tokenUsageByDir, totalTokens, windowedHours } from '../activityStats.js';
 import { transcriptLastActivity } from '../agentProjects.js';
 import { capabilitiesFor } from '../capabilities.js';
-import { usageByModel } from '../modelUsage.js';
+import { fableExhausted, fableLimitState, usageByModel } from '../modelUsage.js';
 import { clearCapabilities } from '../capabilitiesPrompt.js';
 import { readConfig } from '../configPersistence.js';
 import type { HttpServerOptions } from '../httpServer.js';
@@ -166,8 +166,9 @@ export function registerStatsRoutes(app: FastifyInstance, options: HttpServerOpt
   // Límites de uso de la cuenta (sesión de 5 h y semana), escritos por la statusline.
   app.get('/api/usage', async () => {
     try {
-      const u = JSON.parse(fs.readFileSync(usageFile(), 'utf8')) as Record<string, unknown>;
-      return { ...u, plan: claudePlan() };
+      const u = JSON.parse(fs.readFileSync(usageFile(), 'utf8')) as Record<string, unknown> & { seven_day?: { resets_at?: number } | null };
+      const { reachedAt, lastReplyAt } = fableLimitState();
+      return { ...u, plan: claudePlan(), fable: { exhausted: fableExhausted(reachedAt, lastReplyAt, u.seven_day?.resets_at, Date.now()), reachedAt } };
     } catch {
       return null;
     }
