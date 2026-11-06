@@ -396,6 +396,19 @@ export function promptDaysByDir(dirs: Array<{ name: string; path: string }>, fil
   return out;
 }
 
+/** Prompts humanos por día de cada conversación de una carpeta. */
+export function promptDaysBySession(cwd: string): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {};
+  for (const f of sessionFiles(cwd)) {
+    const stats = scanFile(f);
+    if (!stats) continue;
+    const days: Record<string, number> = {};
+    for (const [k, v] of Object.entries(stats.days)) if (v.prompts > 0) days[k] = v.prompts;
+    out[path.basename(f, '.jsonl')] = days;
+  }
+  return out;
+}
+
 export function persistedActivityStats(dirs: Array<{ name: string; path: string }>, file: string): ActivityStats {
   const per = persistedPerDir(dirs, file);
   const live = per.map((x) => x.live);

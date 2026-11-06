@@ -10,7 +10,7 @@ import type { FastifyInstance } from 'fastify';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { promptDaysByDir } from '../activityStats.js';
+import { promptDaysByAgent } from '../agentPromptDays.js';
 import { readConfig } from '../configPersistence.js';
 import type { HttpServerOptions } from '../httpServer.js';
 import { activityFile, officeDir, scriptsDir } from '../officePaths.js';
@@ -271,7 +271,7 @@ function resolve(): {
   const agents: Record<string, AgentSkin> = {};
   const ranks: Record<string, AgentRank> = {};
   const parents = parentsOf(data);
-  const prompts = promptDaysByDir(cfg.directories, activityFile());
+  const prompts = promptDaysByAgent(cfg.directories, activityFile());
   const url = (id: number, anim: string) => {
     const f = data.evo[id];
     return data.sprite.replace('{gen}', String(f?.gen ?? 1)).replace('{slug}', f?.slug ?? '').replace('{anim}', anim);

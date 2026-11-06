@@ -9,6 +9,7 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { claimSessions, renameAgentPrompts } from '../agentPromptDays.js';
 import { capabilitiesPromptFor, ensureProjectContext } from '../capabilitiesPrompt.js';
 import { transcriptLastActivity } from '../agentProjects.js';
 import { readConfig } from '../configPersistence.js';
@@ -343,11 +344,16 @@ export function readRememberedSessions(): Record<string, string> {
 export function rememberSessions(deps: Pick<LaunchStandaloneAgentDeps, 'store' | 'ptyManager'>): void {
   const before = readRememberedSessions();
   const next = { ...before };
+  const claims: Array<{ sessionId: string; name: string }> = [];
   for (const a of deps.store.values()) {
     if (a.isExternal || !a.directoryName || !deps.ptyManager.has(a.id)) continue;
     // Una conversación recién abierta aún no tiene transcript: no pisa a la anterior.
-    if (a.jsonlFile && fs.existsSync(a.jsonlFile)) next[a.directoryName] = a.sessionId;
+    if (a.jsonlFile && fs.existsSync(a.jsonlFile)) {
+      next[a.directoryName] = a.sessionId;
+      claims.push({ sessionId: a.sessionId, name: a.directoryName });
+    }
   }
+  claimSessions(claims);
   if (JSON.stringify(next) === JSON.stringify(before)) return;
   try {
     fs.mkdirSync(officeDir(), { recursive: true });
@@ -359,6 +365,7 @@ export function rememberSessions(deps: Pick<LaunchStandaloneAgentDeps, 'store' |
 
 /** Renombrar un agente conserva su conversación recordada. */
 export function renameRememberedSession(from: string, to: string): void {
+  renameAgentPrompts(from, to);
   const all = readRememberedSessions();
   if (!all[from]) return;
   all[to] = all[from];
