@@ -36,7 +36,7 @@ import {
 import { FileStateAdapter } from './fileStateAdapter.js';
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
 import { PixelAgentsServer } from './server.js';
-import { relaunchAll } from './terminal/relaunch.js';
+import { relaunchAll, rememberSessions } from './terminal/relaunch.js';
 import { PtySessionManager } from './terminal/ptySessionManager.js';
 import { isLoopbackHost, normalizeHostname } from './wsAuth.js';
 
@@ -361,6 +361,11 @@ async function main(): Promise<void> {
     }
 
     reportTerminalStatus(ptyManager, args.host, args.terminal);
+
+    if (args.terminal) {
+      // Recuerda la conversación de cada Directorio para el próximo reinicio.
+      setInterval(() => rememberSessions({ store, ptyManager }), 30_000).unref();
+    }
 
     if (args.relaunch && args.terminal) {
       // Unos segundos después del arranque, cuando hooks y assets ya quedaron listos.

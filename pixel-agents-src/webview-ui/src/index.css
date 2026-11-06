@@ -40,6 +40,7 @@
   --color-status-permission: #cca700;
   --color-status-active: #3794ff;
   --color-status-success: #89d185;
+  --color-xp: #48c8f0;
   --color-status-error: var(--color-danger);
 
   /* Shadow */
@@ -87,6 +88,7 @@
   --color-status-permission: var(--color-status-permission);
   --color-status-active: var(--color-status-active);
   --color-status-success: var(--color-status-success);
+  --color-xp: var(--color-xp);
   --color-status-error: var(--color-status-error);
 
   /* Shadow */

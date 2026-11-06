@@ -12,6 +12,7 @@ import * as path from 'path';
 import { capabilitiesPromptFor, ensureProjectContext } from '../capabilitiesPrompt.js';
 import { transcriptLastActivity } from '../agentProjects.js';
 import { readConfig } from '../configPersistence.js';
+import { officeDir } from '../officePaths.js';
 import type { LaunchStandaloneAgentDeps } from './standaloneAgentLauncher.js';
 import { launchStandaloneAgent } from './standaloneAgentLauncher.js';
 
@@ -23,7 +24,7 @@ export interface RelaunchResult {
 }
 
 /** Sesión más reciente (por fecha de modificación) de una carpeta de trabajo. */
-export function latestSessionId(deps: LaunchStandaloneAgentDeps, cwd: string): string | null {
+export function latestSessionId(deps: LaunchStandaloneAgentDeps, cwd: string, exclude: ReadonlySet<string> = new Set()): string | null {
   // Claude guarda el transcript bajo la ruta REAL del cwd (p. ej. /tmp → /private/tmp),
   // así que se consultan la ruta dada y su realpath.
   const candidates = new Set<string>([cwd]);
@@ -44,7 +45,7 @@ export function latestSessionId(deps: LaunchStandaloneAgentDeps, cwd: string): s
       continue;
     }
     for (const name of names) {
-      if (!name.endsWith('.jsonl')) continue;
+      if (!name.endsWith('.jsonl') || exclude.has(name.slice(0, -'.jsonl'.length))) continue;
       const file = path.join(dir, name);
       let st: fs.Stats;
       try {
@@ -59,6 +60,29 @@ export function latestSessionId(deps: LaunchStandaloneAgentDeps, cwd: string): s
   all.sort((a, b) => b.mtime - a.mtime);
   const withPrompts = all.find((c) => transcriptLastActivity(c.file) !== null);
   return (withPrompts ?? all[0])?.id ?? null;
+}
+
+/**
+ * Conversación que reanuda cada Directorio. Con la carpeta para él solo, la más reciente.
+ * Si varios Directorios comparten carpeta (dos agentes en un repo), cada uno vuelve a la
+ * suya: la recordada si sigue en disco; si no, la más reciente que no sea de otro.
+ */
+export function sessionForDirectory(
+  deps: LaunchStandaloneAgentDeps,
+  dir: { name: string; path: string },
+  all: ReadonlyArray<{ name: string; path: string }>,
+  remembered: Readonly<Record<string, string>>,
+  taken: ReadonlySet<string>,
+): string | null {
+  const siblings = all.filter((d) => d.path === dir.path && d.name !== dir.name);
+  if (siblings.length === 0) return latestSessionId(deps, dir.path);
+  const own = remembered[dir.name];
+  if (own && !taken.has(own)) {
+    const exists = (deps.provider.getSessionDirs?.(dir.path) ?? []).some((d) => fs.existsSync(path.join(d, `${own}.jsonl`)));
+    if (exists) return own;
+  }
+  const others = siblings.map((d) => remembered[d.name]).filter((id): id is string => !!id);
+  return latestSessionId(deps, dir.path, new Set([...taken, ...others]));
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -189,7 +213,9 @@ export async function relaunchAll(
     console.error('[Pixel Agents] Relaunch: terminal no disponible');
     return results;
   }
-  const dirs = readConfig().directories.filter(
+  const allDirs = readConfig().directories;
+  const remembered = readRememberedSessions();
+  const dirs = allDirs.filter(
     (d) => !options.only || options.only.includes(d.name) || options.only.includes(d.path),
   );
   // Terminales de la oficina sin agente en estas carpetas (p. ej. de un agente borrado): se cierran antes.
@@ -214,7 +240,8 @@ export async function relaunchAll(
       results.push({ directory: d.name, sessionId: null, agentId: null, skipped: 'ya tiene terminal' });
       continue;
     }
-    const sessionId = latestSessionId(deps, cwd);
+    const live = new Set([...store.values()].filter((a) => !a.isExternal && ptyManager.has(a.id)).map((a) => a.sessionId));
+    const sessionId = sessionForDirectory(deps, d, allDirs, remembered, live);
     // Otro Directorio con la misma carpeta ya reanudó esa conversación → este abre una nueva.
     const takenBy = sessionId ? [...store.values()].find((a) => !a.isExternal && a.sessionId === sessionId && ptyManager.has(a.id)) : undefined;
     // Conversación VIVA en otra terminal (fuera de la oficina): su transcript cambió hace
@@ -256,5 +283,89 @@ export async function relaunchAll(
     );
     await sleep(options.delayMs ?? 1500);
   }
+  if (!options.only) retireGhostExternals(deps);
+  rememberSessions(deps);
   return results;
+}
+
+/**
+ * Tras el arranque el watcher adopta como externa toda conversación tocada hace poco,
+ * también las que acaban de cerrarse con el reinicio. Si no hay ningún `claude` ajeno
+ * trabajando en ella, no es una sesión externa sino un fantasma con el nombre del Directorio.
+ */
+function retireGhostExternals(deps: LaunchStandaloneAgentDeps): void {
+  if (process.platform === 'win32') return; // sin cwd de los procesos no se puede afirmar
+  const { store, runtime, ptyManager } = deps;
+  const ownPids = new Set<number>();
+  for (const a of store.values()) {
+    const pid = ptyManager.get(a.id)?.pid;
+    if (typeof pid === 'number') ownPids.add(pid);
+  }
+  const procs = liveClaudeProcesses(ownPids).filter((p) => p.ppid !== process.pid);
+  const paths = new Map(readConfig().directories.map((d) => [d.name, d.path]));
+  for (const a of [...store.values()]) {
+    if (!a.isExternal) continue;
+    const dir = a.directoryName ? paths.get(a.directoryName) : undefined;
+    if (dir === undefined || !isGhostExternal(a.sessionId, dir, procs)) continue;
+    console.log(`[Pixel Agents] Relaunch: retirada la sesión externa sin proceso ${a.sessionId.slice(0, 8)}… (${a.directoryName})`);
+    runtime.unregisterAgent(a.sessionId);
+    runtime.closeAgent(a.id);
+  }
+}
+
+/** Fantasma = ningún proceso ajeno reanuda esa conversación ni trabaja en esa carpeta (o debajo). */
+export function isGhostExternal(sessionId: string, dir: string, procs: ReadonlyArray<{ argv: string; cwd: string | null }>): boolean {
+  let real = dir;
+  try {
+    real = fs.realpathSync(dir);
+  } catch {
+    /* se queda la ruta dada */
+  }
+  const inside = (cwd: string | null) => cwd !== null && [dir, real].some((r) => cwd === r || cwd.startsWith(r + path.sep));
+  return !procs.some((p) => p.argv.includes(sessionId) || inside(p.cwd));
+}
+
+// Última conversación de cada Directorio. El estado de agentes no sirve para esto: el
+// watcher lo reescribe al arrancar, antes de relanzar.
+function sessionsFile(): string {
+  return path.join(officeDir(), 'sesiones.json');
+}
+
+export function readRememberedSessions(): Record<string, string> {
+  try {
+    return JSON.parse(fs.readFileSync(sessionsFile(), 'utf8')) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+/** Guarda la conversación de cada agente con terminal. Nunca borra: al morir la terminal hay que recordarla. */
+export function rememberSessions(deps: Pick<LaunchStandaloneAgentDeps, 'store' | 'ptyManager'>): void {
+  const before = readRememberedSessions();
+  const next = { ...before };
+  for (const a of deps.store.values()) {
+    if (a.isExternal || !a.directoryName || !deps.ptyManager.has(a.id)) continue;
+    // Una conversación recién abierta aún no tiene transcript: no pisa a la anterior.
+    if (a.jsonlFile && fs.existsSync(a.jsonlFile)) next[a.directoryName] = a.sessionId;
+  }
+  if (JSON.stringify(next) === JSON.stringify(before)) return;
+  try {
+    fs.mkdirSync(officeDir(), { recursive: true });
+    fs.writeFileSync(sessionsFile(), JSON.stringify(next, null, 2));
+  } catch (e) {
+    console.error('[Pixel Agents] No se pudieron recordar las conversaciones:', e);
+  }
+}
+
+/** Renombrar un agente conserva su conversación recordada. */
+export function renameRememberedSession(from: string, to: string): void {
+  const all = readRememberedSessions();
+  if (!all[from]) return;
+  all[to] = all[from];
+  delete all[from];
+  try {
+    fs.writeFileSync(sessionsFile(), JSON.stringify(all, null, 2));
+  } catch {
+    /* se volverá a guardar en el siguiente repaso */
+  }
 }

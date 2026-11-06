@@ -15,7 +15,7 @@ import { hostDirectory } from '../hostDirectory.js';
 import type { HttpServerOptions } from '../httpServer.js';
 import { writeLayoutToFile } from '../layoutPersistence.js';
 import { officeDir, scriptsDir, activityFile, capabilitiesFile } from '../officePaths.js';
-import { killStrayOfficeClaude, relaunchAll } from '../terminal/relaunch.js';
+import { killStrayOfficeClaude, relaunchAll, renameRememberedSession } from '../terminal/relaunch.js';
 import { launchStandaloneAgent } from '../terminal/standaloneAgentLauncher.js';
 import { bearerAuth, desksFor, HOME, insideHome, launchDeps, runProyecto, writePromptToAgent } from './shared.js';
 import { renameSkinAgent } from './skinRoutes.js';
@@ -206,6 +206,7 @@ export function registerRoomsRoutes(app: FastifyInstance, options: HttpServerOpt
         }
       }
       renameSkinAgent(from, to);
+      renameRememberedSession(from, to);
       options.store.broadcast({ type: 'directoriesLoaded', directories: listDirectories([hostDirectory()]) });
       options.store.broadcast({ type: 'areaMappingsLoaded', mappings: cfg.standalone.areaMappings });
       let launched: unknown = null;
