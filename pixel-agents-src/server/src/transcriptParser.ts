@@ -259,6 +259,13 @@ export function processTranscriptLine(
       );
     } else if (record.type === 'progress') {
       processProgressRecord(agentId, record, agents, waitingTimers, permissionTimers);
+    } else if (record.type === 'user' && (record.isCompactSummary || record.isMeta || record.isVisibleInTranscriptOnly)) {
+      // Resumen de una compactación o mensaje interno de Claude Code: no es un prompt.
+      // Tratarlo como tal dejaba al agente "Trabajando" para siempre (no llega Stop).
+    } else if (record.type === 'user' && isInterruption(record.message?.content ?? record.content)) {
+      // Cancelaste con Esc: el turno termina sin Stop hook ni turn_duration.
+      processTranscriptLine(agentId, '{"type":"system","subtype":"turn_duration"}', agents, waitingTimers, permissionTimers);
+      if (agent.hookDelivered) agents.broadcast({ type: 'agentStatus', id: agentId, status: 'waiting', awaitingInput: false });
     } else if (record.type === 'user') {
       const content = record.message?.content ?? record.content;
       if (Array.isArray(content)) {
@@ -755,6 +762,12 @@ function firstTextOf(blocks: Array<{ type: string; text?: unknown }>): string {
  * locales). No arrancan un turno de Claude, así que no deben dejar al agente
  * en "trabajando" para siempre cuando nunca llega una respuesta.
  */
+/** "[Request interrupted by user]" (o "…for tool use"): el usuario canceló el turno. */
+function isInterruption(content: unknown): boolean {
+  const text = typeof content === 'string' ? content : Array.isArray(content) ? firstTextOf(content as Array<{ type: string }>) : '';
+  return /^\s*\[Request interrupted/.test(text ?? '');
+}
+
 function isInjectedPrompt(text: string): boolean {
   return /^\s*<(task-notification|system-reminder|local-command-stdout|local-command-stderr|command-name|command-message|bash-input|bash-stdout)\b/.test(
     text,

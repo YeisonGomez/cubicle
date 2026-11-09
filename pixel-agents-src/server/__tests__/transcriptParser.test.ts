@@ -349,3 +349,43 @@ describe('transcriptParser: teammate spawn results (new-harness implicit teams)'
     expect(agent.isTeamLead).toBeUndefined();
   });
 });
+
+describe('transcriptParser: compactación e interrupción no dejan al agente trabajando', () => {
+  let agents: AgentStateStore;
+  let messages: Array<Record<string, unknown>>;
+  const waitingTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  const permissionTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  const statuses = () => messages.filter((m) => m.type === 'agentStatus').map((m) => m.status);
+
+  beforeEach(() => {
+    setHookProvider(claudeProvider);
+    agents = new AgentStateStore();
+    agents.set(1, createTestAgent({ hookDelivered: true }));
+    messages = [];
+    agents.on('broadcast', (msg) => messages.push(msg as Record<string, unknown>));
+  });
+
+  it('el resumen de una compactación no es un prompt', () => {
+    const line = JSON.stringify({
+      type: 'user',
+      isCompactSummary: true,
+      isVisibleInTranscriptOnly: true,
+      message: { content: 'This session is being continued from a previous conversation that ran out of context.' },
+    });
+    processTranscriptLine(1, line, agents, waitingTimers, permissionTimers);
+    expect(statuses()).toEqual([]);
+  });
+
+  it('un prompt real sí marca trabajando', () => {
+    processTranscriptLine(1, JSON.stringify({ type: 'user', message: { content: 'hola' } }), agents, waitingTimers, permissionTimers);
+    expect(statuses()).toEqual(['active']);
+  });
+
+  it('cancelar con Esc termina el turno aunque no llegue Stop', () => {
+    processTranscriptLine(1, agentToolUseRecord('t1', 'Bash', { command: 'ls' }), agents, waitingTimers, permissionTimers);
+    const line = JSON.stringify({ type: 'user', message: { content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } });
+    processTranscriptLine(1, line, agents, waitingTimers, permissionTimers);
+    expect(statuses().at(-1)).toBe('waiting');
+    expect(agents.get(1)!.activeToolIds.size).toBe(0);
+  });
+});
