@@ -14,7 +14,7 @@ import { promptDaysByAgent } from '../agentPromptDays.js';
 import { readConfig } from '../configPersistence.js';
 import type { HttpServerOptions } from '../httpServer.js';
 import { activityFile, officeDir, scriptsDir } from '../officePaths.js';
-import { evolutionLevels, levelForXp, MAX_LEVEL, stageForLevel, xpForLevel, xpFromDays } from '../pokemonXp.js';
+import { evolutionLevels, levelForXp, MAX_LEVEL, stageForLevel, XP_DAILY_CAP, XP_PER_PROMPT, xpForLevel, xpFromDays } from '../pokemonXp.js';
 import { nextRankLevel, rankForLevel } from '../ranks.js';
 import { bearerAuth, runProyecto } from './shared.js';
 
@@ -65,7 +65,19 @@ export interface AgentRank {
   nextXp: number;
   rank: number;
   nextRankAt: number | null;
+  /** Prompts (y días, por el tope diario) que faltan para el próximo rango; null si no hay más. */
+  toNext: ToNext | null;
   promoted?: { rank: number };
+}
+export interface ToNext {
+  prompts: number;
+  days: number;
+}
+/** Lo que falta hasta un nivel, en prompts y en días como mínimo (tope diario de XP). */
+export function toNextLevel(xp: number, level: number | null | undefined): ToNext | null {
+  if (!level) return null;
+  const left = Math.max(0, xpForLevel(level) - xp);
+  return { prompts: Math.ceil(left / XP_PER_PROMPT), days: Math.ceil(left / XP_DAILY_CAP) };
 }
 export interface AgentSkin {
   type: string;
@@ -80,6 +92,8 @@ export interface AgentSkin {
   nextXp: number;
   /** Nivel de la próxima evolución y su forma; null si ya no evoluciona más. */
   evolvesAt: number | null;
+  /** Prompts (y días) que faltan para la próxima evolución; null si ya no evoluciona. */
+  toNext: ToNext | null;
   evolving?: { fromName: string; from: string; toName: string; to: string; stage: number };
 }
 
@@ -309,7 +323,7 @@ function resolve(): {
       changed = true;
     }
     if (skin.theme === 'classic') {
-      ranks[d.name] = { ...progress, rank, nextRankAt: nextRankLevel(rank), ...(rank > rankSeen ? { promoted: { rank } } : {}) };
+      ranks[d.name] = { ...progress, rank, nextRankAt: nextRankLevel(rank), toNext: toNextLevel(xp, nextRankLevel(rank)), ...(rank > rankSeen ? { promoted: { rank } } : {}) };
       continue;
     }
     const id = path[seen];
@@ -323,6 +337,7 @@ function resolve(): {
       walk: url(id, 'walk'),
       ...progress,
       evolvesAt: nextLevel ?? null,
+      toNext: toNextLevel(xp, nextLevel),
       ...(stage > seen
         ? { evolving: { fromName: data.evo[id].name, from: url(id, 'idle'), toName: data.evo[path[seen + 1]].name, to: url(path[seen + 1], 'idle'), stage: seen + 1 } }
         : {}),

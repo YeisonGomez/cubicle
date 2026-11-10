@@ -1,7 +1,7 @@
 import type { MutableRefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
-import { EVOLUTION_CHECK_MS, PROMOTION_CONFETTI, PROMOTION_MS } from '../constants.js';
+import { EVOLUTION_CHECK_MS, PROMOTION_CONFETTI } from '../constants.js';
 import { useT } from '../i18n/index.js';
 import { playDoneSound } from '../notificationSound.js';
 import type { OfficeState } from '../office/engine/officeState.js';
@@ -43,12 +43,14 @@ export function PromotionOverlay({ getOfficeState, panRef, paused }: { getOffice
     if (!current) return;
     const restore = spotlightAgent(getOfficeState(), panRef, current.agent);
     void playDoneSound();
-    const end = setTimeout(() => {
-      void ackPromotion(current.agent, current.rank);
-      setCurrent(null);
-    }, PROMOTION_MS);
+    void ackPromotion(current.agent, current.rank);
+    // Queda abierta hasta cerrarla: el confeti cae unos segundos y la tarjeta se queda.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCurrent(null);
+    };
+    window.addEventListener('keydown', onKey);
     return () => {
-      clearTimeout(end);
+      window.removeEventListener('keydown', onKey);
       restore();
     };
   }, [current, getOfficeState, panRef]);
@@ -66,6 +68,9 @@ export function PromotionOverlay({ getOfficeState, panRef, paused }: { getOffice
       <div className="mb-[12%] max-w-[90%] bg-bg-dark border-2 border-border px-16 py-10 text-text text-center text-[16px]" style={{ boxShadow: 'var(--shadow-pixel)' }}>
         <div className="text-text-muted text-[12px] mb-4">{current.agent}</div>
         {t('promotion.done', { rank: t(RANK_KEYS[current.rank]) })}
+        <button type="button" className="pointer-events-auto mt-10 block mx-auto px-12 py-4 bg-accent text-white text-[13px] hover:bg-accent-bright" onClick={() => setCurrent(null)}>
+          {t('evolution.close')}
+        </button>
       </div>
     </div>
   );

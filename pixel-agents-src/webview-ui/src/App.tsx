@@ -25,7 +25,7 @@ import { Modal } from './components/ui/Modal.js';
 import { UsageBadge } from './components/UsageBadge.js';
 import { VersionIndicator } from './components/VersionIndicator.js';
 import { ZoomControls } from './components/ZoomControls.js';
-import { OFFICE_CANVAS_TEST_ID, SKIN_POLL_MS } from './constants.js';
+import { OFFICE_CANVAS_TEST_ID, SKIN_POLL_MS, SKIN_PROMPT_DELAY_MS } from './constants.js';
 import { useDirectoryEditor } from './hooks/useDirectoryEditor.js';
 import { useEditorActions } from './hooks/useEditorActions.js';
 import { useEditorKeyboard } from './hooks/useEditorKeyboard.js';
@@ -372,6 +372,16 @@ function App() {
     const id = setInterval(() => void loadSkin(), SKIN_POLL_MS);
     return () => clearInterval(id);
   }, []);
+  // Al enviar un prompt (el agente pasa a trabajar) se recalcula la experiencia enseguida:
+  // si ese prompt completa el nivel, la evolución o el ascenso empiezan ahí, sin esperar al sondeo.
+  const prevStatuses = useRef<Record<number, string>>({});
+  useEffect(() => {
+    const started = Object.entries(agentStatuses).some(([id, st]) => st === 'active' && prevStatuses.current[Number(id)] !== 'active');
+    prevStatuses.current = agentStatuses;
+    if (!started) return;
+    const id = setTimeout(() => void loadSkin(), SKIN_PROMPT_DELAY_MS);
+    return () => clearTimeout(id);
+  }, [agentStatuses]);
   // Agentes nuevos (o renombrados) aún sin Pokémon: el servidor los sortea al pedir el skin.
   const skinAsked = useRef(new Set<string>());
   useEffect(() => {

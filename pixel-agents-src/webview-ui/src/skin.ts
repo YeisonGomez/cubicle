@@ -7,6 +7,12 @@ import { useSyncExternalStore } from 'react';
 
 import { authHeaders } from './components/panel/api.js';
 
+/** Prompts que faltan para la próxima evolución o rango (y días como mínimo, por el tope diario). */
+export interface ToNext {
+  prompts: number;
+  days: number;
+}
+
 export interface AgentSkin {
   type: string;
   id: number;
@@ -18,6 +24,7 @@ export interface AgentSkin {
   levelXp: number;
   nextXp: number;
   evolvesAt: number | null;
+  toNext?: ToNext | null;
   evolving?: { fromName: string; from: string; toName: string; to: string; stage: number };
 }
 
@@ -29,6 +36,7 @@ export interface AgentRank {
   nextXp: number;
   rank: number;
   nextRankAt: number | null;
+  toNext?: ToNext | null;
   promoted?: { rank: number };
 }
 
