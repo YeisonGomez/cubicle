@@ -46,7 +46,7 @@ interface FileStats {
 }
 const cache = new Map<string, FileStats>();
 
-function dayKey(ms: number): string {
+export function dayKey(ms: number): string {
   const d = new Date(ms);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');

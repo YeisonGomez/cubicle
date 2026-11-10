@@ -26,8 +26,11 @@ export function AgentLevel({ name }: { name: string }) {
   const filled = (pct / 100) * XP_SEGMENTS;
   const n = a.toNext?.prompts ?? 0;
   // Abajo, corto; el detalle (días mínimos) en el tooltip.
-  const left = n ? t(n === 1 ? 'xp.leftOne' : 'xp.left', { n: n.toLocaleString() }) : null;
-  const leftLong = n ? t(pokemon ? 'pokemon.toEvolve' : 'rank.toNext', { n: n.toLocaleString(), d: a.toNext!.days }) : null;
+  const tomorrow = !!a.toNext?.tomorrow;
+  const left = n ? t(`xp.left${n === 1 ? 'One' : ''}${tomorrow ? 'Tomorrow' : ''}`, { n: n.toLocaleString() }) : null;
+  const leftLong = n
+    ? [t(pokemon ? 'pokemon.toEvolve' : 'rank.toNext', { n: n.toLocaleString(), d: a.toNext!.days }), tomorrow ? t('xp.capReached') : ''].filter(Boolean).join('. ')
+    : null;
   return (
     <span className="flex items-center gap-6 shrink-0 text-[12px]" title={[xpText, next, leftLong].filter(Boolean).join(' · ')}>
       <span className="text-text">{pokemon ? pokemon.name : t(RANK_KEYS[rank?.rank ?? 0])}</span>
