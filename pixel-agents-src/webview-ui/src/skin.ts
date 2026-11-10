@@ -108,6 +108,20 @@ export async function ackPromotion(agent: string, rank: number): Promise<void> {
   }
 }
 
+/** Agentes que acaban de recibir un prompt en esta pestaña. Una evolución o un ascenso solo
+ *  se muestran al enviar el prompt que los completa, nunca al cargar o reiniciar la oficina:
+ *  los pendientes esperan al siguiente prompt de ese agente. */
+const prompted = new Set<string>();
+export function markPrompted(agent: string): void {
+  prompted.add(agent);
+}
+export function wasPrompted(agent: string): boolean {
+  return prompted.has(agent);
+}
+export function clearPrompted(agent: string): void {
+  prompted.delete(agent);
+}
+
 export function getSkin(): SkinState {
   return current;
 }

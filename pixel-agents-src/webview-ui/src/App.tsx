@@ -11,7 +11,7 @@ import { EditActionBar } from './components/EditActionBar.js';
 import { IntroBubble } from './components/IntroBubble.js';
 import { MigrationNotice } from './components/MigrationNotice.js';
 import { syncLangToServer } from './i18n/index.js';
-import { loadSkin, useSkin } from './skin.js';
+import { loadSkin, markPrompted, useSkin } from './skin.js';
 import { OnboardingModal } from './components/OnboardingModal.js';
 import { authHeaders } from './components/panel/api.js';
 import { RoomDrawer } from './components/panel/RoomDrawer.js';
@@ -376,9 +376,14 @@ function App() {
   // si ese prompt completa el nivel, la evolución o el ascenso empiezan ahí, sin esperar al sondeo.
   const prevStatuses = useRef<Record<number, string>>({});
   useEffect(() => {
-    const started = Object.entries(agentStatuses).some(([id, st]) => st === 'active' && prevStatuses.current[Number(id)] !== 'active');
+    const started = Object.entries(agentStatuses).filter(([id, st]) => st === 'active' && prevStatuses.current[Number(id)] !== 'active');
     prevStatuses.current = agentStatuses;
-    if (!started) return;
+    if (started.length === 0) return;
+    const os = getOfficeState();
+    for (const [id] of started) {
+      const name = os.characters.get(Number(id))?.directoryName;
+      if (name) markPrompted(name);
+    }
     const id = setTimeout(() => void loadSkin(), SKIN_PROMPT_DELAY_MS);
     return () => clearTimeout(id);
   }, [agentStatuses]);

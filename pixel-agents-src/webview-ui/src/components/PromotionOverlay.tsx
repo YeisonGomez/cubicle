@@ -5,7 +5,7 @@ import { EVOLUTION_CHECK_MS, PROMOTION_CONFETTI } from '../constants.js';
 import { useT } from '../i18n/index.js';
 import { playDoneSound } from '../notificationSound.js';
 import type { OfficeState } from '../office/engine/officeState.js';
-import { ackPromotion, getSkin, RANK_KEYS } from '../skin.js';
+import { ackPromotion, clearPrompted, getSkin, RANK_KEYS, wasPrompted } from '../skin.js';
 import { spotlightAgent } from './spotlightAgent.js';
 
 const CONFETTI_COLORS = ['bg-xp', 'bg-accent-bright', 'bg-status-success', 'bg-status-permission', 'bg-danger'];
@@ -26,9 +26,10 @@ export function PromotionOverlay({ getOfficeState, panRef, paused }: { getOffice
       if (document.visibilityState !== 'visible') return;
       const os = getOfficeState();
       for (const [agent, a] of Object.entries(getSkin().ranks ?? {})) {
-        if (!a.promoted || played.current.has(`${agent}:${a.promoted.rank}`)) continue;
+        if (!a.promoted || !wasPrompted(agent) || played.current.has(`${agent}:${a.promoted.rank}`)) continue;
         if ([...os.characters.values()].some((c) => c.directoryName === agent && !c.isSubagent)) {
           played.current.add(`${agent}:${a.promoted.rank}`);
+          clearPrompted(agent);
           setCurrent({ agent, rank: a.promoted.rank });
           return;
         }
@@ -65,10 +66,10 @@ export function PromotionOverlay({ getOfficeState, panRef, paused }: { getOffice
           style={{ left: `${(i * 37) % 100}%`, animationDelay: `${(i * 113) % 1500}ms`, animationDuration: `${2500 + ((i * 71) % 1500)}ms` }}
         />
       ))}
-      <div className="mb-[12%] max-w-[90%] bg-bg-dark border-2 border-border px-16 py-10 text-text text-center text-[16px]" style={{ boxShadow: 'var(--shadow-pixel)' }}>
-        <div className="text-text-muted text-[12px] mb-4">{current.agent}</div>
+      <div className="mb-[10%] max-w-[90%] bg-bg-dark border-2 border-border px-24 py-16 text-text text-center text-[24px] leading-snug" style={{ boxShadow: 'var(--shadow-pixel)' }}>
+        <div className="text-text-muted text-[16px] mb-6">{current.agent}</div>
         {t('promotion.done', { rank: t(RANK_KEYS[current.rank]) })}
-        <button type="button" className="pointer-events-auto mt-10 block mx-auto px-12 py-4 bg-accent text-white text-[13px] hover:bg-accent-bright" onClick={() => setCurrent(null)}>
+        <button type="button" className="pointer-events-auto mt-14 block mx-auto px-16 py-6 bg-accent text-white text-[16px] hover:bg-accent-bright" onClick={() => setCurrent(null)}>
           {t('evolution.close')}
         </button>
       </div>
