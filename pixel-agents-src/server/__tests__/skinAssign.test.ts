@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { assignPokemon, freezeRoomTypes, type PokeData, type SkinFile } from '../src/office/skinRoutes.js';
-import { xpForLevel, XP_DAILY_CAP } from '../src/pokemonXp.js';
+import { xpForLevel, XP_PER_PROMPT } from '../src/pokemonXp.js';
 import { nextRankLevel, RANK_LEVELS, rankForLevel } from '../src/ranks.js';
 
 const p = (id: number) => ({ id, name: `p${id}`, slug: `p${id}`, gen: 1 });
@@ -98,8 +98,8 @@ describe('rangos', () => {
     expect(nextRankLevel(0)).toBe(10);
     expect(nextRankLevel(6)).toBeNull();
   });
-  it('respetan el tiempo mínimo prometido, gracias al tope diario', () => {
-    const days = RANK_LEVELS.slice(1).map((l) => Math.ceil(xpForLevel(l) / XP_DAILY_CAP));
-    [7, 30, 60, 150, 240, 365].forEach((min, i) => expect(days[i]).toBeGreaterThanOrEqual(min));
+  it('cada rango cuesta más prompts que el anterior', () => {
+    const p = RANK_LEVELS.slice(1).map((l) => Math.ceil(xpForLevel(l) / XP_PER_PROMPT));
+    [50, 300, 600, 1500, 2400, 4000].forEach((min, i) => expect(p[i]).toBeGreaterThanOrEqual(min));
   });
 });

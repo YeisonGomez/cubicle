@@ -1,19 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
-import { evolutionLevels, levelForXp, MAX_LEVEL, stageForLevel, XP_DAILY_CAP, xpForLevel, xpFromDays } from '../src/pokemonXp.js';
+import { evolutionLevels, levelForXp, MAX_LEVEL, stageForLevel, XP_PER_PROMPT, xpForLevel, xpFromDays } from '../src/pokemonXp.js';
 
-const minDays = (level: number) => Math.ceil(xpForLevel(level) / XP_DAILY_CAP);
+const prompts = (level: number) => Math.ceil(xpForLevel(level) / XP_PER_PROMPT);
 
 describe('experiencia Pokémon', () => {
-  it('respeta el tiempo mínimo para evolucionar aunque se use cada día al tope', () => {
+  it('evolucionar cuesta cientos de prompts y el nivel 100 unos 4.000', () => {
     const [a, b] = evolutionLevels(3);
-    expect(minDays(a)).toBeGreaterThanOrEqual(30);
-    expect(minDays(b)).toBeGreaterThanOrEqual(60);
-    expect(minDays(evolutionLevels(2)[0])).toBeGreaterThanOrEqual(60);
-    expect(minDays(evolutionLevels(4)[2])).toBeGreaterThanOrEqual(90);
+    expect(prompts(a)).toBeGreaterThanOrEqual(300);
+    expect(prompts(b)).toBeGreaterThanOrEqual(600);
+    expect(prompts(evolutionLevels(2)[0])).toBeGreaterThanOrEqual(600);
+    expect(prompts(evolutionLevels(4)[2])).toBeGreaterThanOrEqual(900);
+    expect(prompts(MAX_LEVEL)).toBe(4000);
   });
-  it('el tope diario limita a quien manda muchos prompts', () => {
-    expect(xpFromDays({ '2026-01-01': 500 })).toBe(XP_DAILY_CAP);
+  it('sin tope diario: cada prompt suma', () => {
+    expect(xpFromDays({ '2026-01-01': 500 })).toBe(500 * XP_PER_PROMPT);
     expect(xpFromDays({ '2026-01-01': 1, '2026-01-02': 2 })).toBe(60);
     expect(xpFromDays(undefined)).toBe(0);
   });

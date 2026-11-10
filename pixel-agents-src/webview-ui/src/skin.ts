@@ -7,13 +7,9 @@ import { useSyncExternalStore } from 'react';
 
 import { authHeaders } from './components/panel/api.js';
 
-/** Prompts que faltan para la próxima evolución o rango (y días como mínimo, por el tope diario). */
+/** Prompts que faltan para la próxima evolución o rango (cada prompt suma, sin tope). */
 export interface ToNext {
   prompts: number;
-  /** Días más, después de hoy, como mínimo (0 = se puede hoy). */
-  days: number;
-  /** El tope de hoy ya se llenó: cuenta desde mañana. */
-  tomorrow?: boolean;
 }
 
 export interface AgentSkin {

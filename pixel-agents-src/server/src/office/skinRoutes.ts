@@ -10,12 +10,11 @@ import type { FastifyInstance } from 'fastify';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { dayKey } from '../activityStats.js';
 import { promptDaysByAgent } from '../agentPromptDays.js';
 import { readConfig } from '../configPersistence.js';
 import type { HttpServerOptions } from '../httpServer.js';
 import { activityFile, officeDir, scriptsDir } from '../officePaths.js';
-import { evolutionLevels, levelForXp, MAX_LEVEL, stageForLevel, XP_DAILY_CAP, XP_PER_PROMPT, xpForLevel, xpFromDays } from '../pokemonXp.js';
+import { evolutionLevels, levelForXp, MAX_LEVEL, stageForLevel, XP_PER_PROMPT, xpForLevel, xpFromDays } from '../pokemonXp.js';
 import { nextRankLevel, rankForLevel } from '../ranks.js';
 import { bearerAuth, runProyecto } from './shared.js';
 
@@ -72,22 +71,11 @@ export interface AgentRank {
 }
 export interface ToNext {
   prompts: number;
-  /** Días más, después de hoy, que hacen falta como mínimo por el tope diario (0 = se puede hoy). */
-  days: number;
-  /** El tope de hoy ya se llenó: los prompts de hoy no suman, cuenta desde mañana. */
-  tomorrow: boolean;
 }
-/** Lo que falta hasta un nivel, en prompts y en días como mínimo, teniendo en cuenta
- *  lo que ya se gastó del tope de hoy (si se llenó, los prompts de más no suman). */
-export function toNextLevel(xp: number, level: number | null | undefined, todayPrompts = 0): ToNext | null {
+/** Prompts que faltan hasta un nivel (sin tope diario: cada prompt suma). */
+export function toNextLevel(xp: number, level: number | null | undefined): ToNext | null {
   if (!level) return null;
-  const left = Math.max(0, xpForLevel(level) - xp);
-  const room = Math.max(0, XP_DAILY_CAP - Math.min(todayPrompts * XP_PER_PROMPT, XP_DAILY_CAP));
-  return {
-    prompts: Math.ceil(left / XP_PER_PROMPT),
-    days: left <= room ? 0 : Math.ceil((left - room) / XP_DAILY_CAP),
-    tomorrow: left > 0 && room === 0,
-  };
+  return { prompts: Math.ceil(Math.max(0, xpForLevel(level) - xp) / XP_PER_PROMPT) };
 }
 export interface AgentSkin {
   type: string;
@@ -317,7 +305,6 @@ function resolve(): {
       changed = true;
     }
     const xp = xpFromDays(prompts[d.name]);
-    const today = prompts[d.name]?.[dayKey(Date.now())] ?? 0;
     const level = levelForXp(xp);
     const progress = { level, xp, levelXp: xpForLevel(level), nextXp: level >= MAX_LEVEL ? xp : xpForLevel(level + 1) };
     const stage = stageForLevel(level, path.length);
@@ -334,7 +321,7 @@ function resolve(): {
       changed = true;
     }
     if (skin.theme === 'classic') {
-      ranks[d.name] = { ...progress, rank, nextRankAt: nextRankLevel(rank), toNext: toNextLevel(xp, nextRankLevel(rank), today), ...(rank > rankSeen ? { promoted: { rank } } : {}) };
+      ranks[d.name] = { ...progress, rank, nextRankAt: nextRankLevel(rank), toNext: toNextLevel(xp, nextRankLevel(rank)), ...(rank > rankSeen ? { promoted: { rank } } : {}) };
       continue;
     }
     const id = path[seen];
@@ -348,7 +335,7 @@ function resolve(): {
       walk: url(id, 'walk'),
       ...progress,
       evolvesAt: nextLevel ?? null,
-      toNext: toNextLevel(xp, nextLevel, today),
+      toNext: toNextLevel(xp, nextLevel),
       ...(stage > seen
         ? { evolving: { fromName: data.evo[id].name, from: url(id, 'idle'), toName: data.evo[path[seen + 1]].name, to: url(path[seen + 1], 'idle'), stage: seen + 1 } }
         : {}),
