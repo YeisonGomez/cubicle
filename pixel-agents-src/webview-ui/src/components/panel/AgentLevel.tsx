@@ -41,7 +41,7 @@ export function AgentLevel({ name }: { name: string }) {
           ))}
         </span>
         {/* Debajo, fuera del flujo: así la barra sigue centrada con los botones de la cabecera. */}
-        {left && <span className="absolute top-full left-0 mt-[2px] whitespace-nowrap text-[10px] leading-none text-text-muted">{left}</span>}
+        {left && <span className="absolute top-full right-0 mt-[2px] whitespace-nowrap text-[10px] leading-none text-text-muted">{left}</span>}
       </span>
     </span>
   );
