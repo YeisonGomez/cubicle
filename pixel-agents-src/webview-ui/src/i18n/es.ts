@@ -183,6 +183,8 @@ export const es: Record<string, string> = {
   'pokemon.xp': 'XP',
   'pokemon.max': 'Máximo',
   'pokemon.evolvesAt': 'Evoluciona en el nivel {level}',
+  'xp.left': 'Faltan {n} prompts',
+  'xp.leftOne': 'Falta 1 prompt',
   'pokemon.toEvolve': 'Faltan {n} prompts para evolucionar (≥{d} días)',
   'rank.toNext': 'Faltan {n} prompts para ascender (≥{d} días)',
   'evolution.close': 'Cerrar',

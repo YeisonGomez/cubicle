@@ -175,6 +175,8 @@ export const en: Record<string, string> = {
   'pokemon.xp': 'XP',
   'pokemon.max': 'Max',
   'pokemon.evolvesAt': 'Evolves at level {level}',
+  'xp.left': '{n} prompts left',
+  'xp.leftOne': '1 prompt left',
   'pokemon.toEvolve': '{n} prompts to evolve (≥{d} days)',
   'rank.toNext': '{n} prompts to next rank (≥{d} days)',
   'evolution.close': 'Close',
