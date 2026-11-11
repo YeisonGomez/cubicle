@@ -24,7 +24,9 @@ export function AgentLevel({ name }: { name: string }) {
       : t('rank.top');
   // Cuánto de la barra entera llena cada tramo: los anteriores completos, el actual en parte.
   const filled = (pct / 100) * XP_SEGMENTS;
-  const n = a.toNext?.prompts ?? 0;
+  // Con la evolución o el ascenso ya ganados pero sin mostrar, el siguiente prompt los dispara.
+  const pending = !!(pokemon?.evolving || rank?.promoted);
+  const n = pending ? 1 : (a.toNext?.prompts ?? 0);
   // Abajo, corto; el detalle (días mínimos) en el tooltip.
   const left = n ? t(n === 1 ? 'xp.leftOne' : 'xp.left', { n: n.toLocaleString() }) : null;
   const leftLong = n ? t(pokemon ? 'pokemon.toEvolve' : 'rank.toNext', { n: n.toLocaleString() }) : null;
