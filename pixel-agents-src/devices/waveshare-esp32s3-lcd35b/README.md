@@ -1,0 +1,38 @@
+# Cubicle Screen — Waveshare ESP32-S3-Touch-LCD-3.5B
+
+Tus agentes de Cubicle en una pantalla táctil por Wi-Fi: nombre, color de su sala, Pokémon y estado (Trabajando, Te necesita, Libre). Al tocar uno, Cubicle lo abre en el computador (panel del agente, su terminal y el navegador al frente en macOS).
+
+## Cómo funciona
+
+- Cubicle abre un servidor HTTP **aparte** en la red local (puerto 3101), solo con dos rutas y una clave propia (`X-Cubicle-Key`). El servidor de la oficina, que lleva la terminal, sigue escuchando solo en `127.0.0.1`. Está apagado hasta que `~/.pixel-agents/oficina/dispositivo.json` tenga `"enabled": true` (lo crea `flash.sh`).
+  - `GET /device/agents` → `{ agents: [{ id, name, room, color, status: working|permission|idle, pokemon? }] }`
+  - `POST /device/open {"id": n}` → la oficina abre ese agente.
+- La pantalla consulta cada 2 s y solo redibuja si algo cambió.
+
+## Instalar
+
+1. `brew install arduino-cli`, y luego:
+   ```bash
+   arduino-cli config init
+   arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+   arduino-cli core update-index && arduino-cli core install esp32:esp32@3.2.0
+   arduino-cli lib install "GFX Library for Arduino@1.6.0" "TCA9554@0.1.2" "WiFiManager" "ArduinoJson"
+   ```
+2. Conecta la pantalla con un cable USB **de datos** (si el Mac no la ve, prueba otro puerto o cable: muchos solo cargan).
+3. `./flash.sh` — compila, carga, activa la pantalla en Cubicle y le guarda servidor (`<tu-mac>.local`), puerto y clave por USB.
+4. `cubicle restart` (y "Permitir" si macOS pregunta por conexiones entrantes a `node`).
+5. Wi-Fi: la primera vez la pantalla crea la red **Cubicle-Pantalla**; conéctate desde el móvil y elige tu Wi-Fi. La contraseña se queda en la placa.
+
+Después basta el cable de carga: la pantalla funciona sola por Wi-Fi.
+
+## Uso
+
+- Tocar una ficha → se abre el agente en el computador.
+- Tocar la cabecera → página siguiente (si hay más de 14 agentes).
+- BOOT 3 s → olvida el Wi-Fi y vuelve a abrir el portal.
+- `./flash.sh config` → solo vuelve a guardar servidor y clave (p. ej. si cambias de clave).
+- Por el puerto serie: `INFO` (estado), `WIFI_RESET`, `CFG {"host":"…","port":3101,"key":"…"}`.
+
+## Hardware
+
+Controlador AXS15231B (pantalla por QSPI 320x480 y táctil por I2C 0x3B, SDA 8 / SCL 7). Reset de la pantalla por el expansor TCA9554 (0x20, pin 1); luz de fondo en GPIO 6. ESP32-S3R8: 16 MB de flash, 8 MB de PSRAM octal.
