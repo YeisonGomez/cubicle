@@ -10,9 +10,13 @@
  *   GET  /device/agents          → { agents: [{ id, name, room, color, status, pokemon?, sprite? }] }
  *   GET  /device/sprite/:n       → sprite animado del Pokémon n, listo para dibujar (deviceSprites.ts)
  *   POST /device/open  {"id": n} → la webview abre ese agente y el navegador pasa al frente
+ *
+ * "Te necesita" (terminó o pregunta y aún no lo has mirado) lo decide la webview: lo
+ * sube con PUT /api/device/attention (servidor de la oficina, con token) y aquí se marca.
  */
 import { execFile } from 'child_process';
 import * as crypto from 'crypto';
+import type { FastifyInstance } from 'fastify';
 import * as fs from 'fs';
 import * as http from 'http';
 import * as path from 'path';
@@ -20,8 +24,10 @@ import * as path from 'path';
 import { promptDaysByAgent } from '../agentPromptDays.js';
 import type { AgentStateStore } from '../agentStateStore.js';
 import { readConfig } from '../configPersistence.js';
+import type { HttpServerOptions } from '../httpServer.js';
 import { activityFile, officeDir } from '../officePaths.js';
 import { spriteFor } from './deviceSprites.js';
+import { bearerAuth } from './shared.js';
 import { resolveSkin } from './skinRoutes.js';
 
 export const DEVICE_PORT_DEFAULT = 3101;
@@ -35,7 +41,7 @@ interface DeviceConfig {
   port: number;
 }
 
-export type DeviceStatus = 'working' | 'permission' | 'idle';
+export type DeviceStatus = 'working' | 'permission' | 'question' | 'idle';
 
 export interface DeviceAgent {
   id: number;
@@ -46,6 +52,32 @@ export interface DeviceAgent {
   pokemon?: string;
   /** Id del Pokémon: la placa pide su sprite a /device/sprite/:id. */
   sprite?: number;
+  /** Seleccionado en la oficina. */
+  selected?: boolean;
+}
+
+/** Agentes que la oficina muestra como "Te necesita" (pendientes de mirar). */
+let attention = new Set<number>();
+/** Agente seleccionado en la oficina (la pantalla lo resalta). */
+let selectedId: number | null = null;
+export function setDeviceAttention(ids: number[], selected: number | null = null): void {
+  attention = new Set(ids.filter((n) => Number.isInteger(n)));
+  selectedId = selected;
+}
+
+/** Estado para la pantalla: el del agente y, si está libre pero pendiente de mirar, "Te necesita". */
+export function effectiveStatus(status: DeviceStatus, id: number, pending: ReadonlySet<number> = attention): DeviceStatus {
+  return status === 'idle' && pending.has(id) ? 'question' : status;
+}
+
+/** PUT /api/device/attention {ids, selected}: la webview sube sus pendientes y el seleccionado. */
+export function registerDeviceRoutes(app: FastifyInstance, options: HttpServerOptions): void {
+  app.put<{ Body: { ids?: unknown; selected?: unknown } }>('/api/device/attention', { preHandler: bearerAuth(options.token) }, async (request, reply) => {
+    const ids = Array.isArray(request.body?.ids) ? (request.body.ids as unknown[]).filter((n): n is number => typeof n === 'number') : [];
+    const sel = request.body?.selected;
+    setDeviceAttention(ids, typeof sel === 'number' ? sel : null);
+    return reply.send({ ok: true });
+  });
 }
 
 const configFile = (): string => path.join(officeDir(), 'dispositivo.json');
@@ -189,7 +221,7 @@ export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTr
     const name = a.directoryName;
     if (!name || (byName.get(name)?.id ?? Infinity) < a.id) continue;
     const room = areaOf(name) ?? '';
-    byName.set(name, { id: a.id, name, room, color: colors.get(room) ?? ROOM_COLOR_FALLBACK, status: tracker.get(a.id), ...(pokemon[name] ? { pokemon: pokemon[name].name, sprite: pokemon[name].id } : {}) });
+    byName.set(name, { id: a.id, name, room, color: colors.get(room) ?? ROOM_COLOR_FALLBACK, status: effectiveStatus(tracker.get(a.id), a.id), ...(pokemon[name] ? { pokemon: pokemon[name].name, sprite: pokemon[name].id } : {}), ...(a.id === selectedId ? { selected: true } : {}) });
   }
   return sortByUsage([...byName.values()], usageByAgent());
 }

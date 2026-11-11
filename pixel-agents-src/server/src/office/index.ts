@@ -5,7 +5,7 @@ import { ensureProjectContext } from '../capabilitiesPrompt.js';
 import { readConfig } from '../configPersistence.js';
 import type { HttpServerOptions } from '../httpServer.js';
 import { registerDashboardRoutes } from './dashboardRoutes.js';
-import { startDeviceServer } from './deviceRoutes.js';
+import { registerDeviceRoutes, startDeviceServer } from './deviceRoutes.js';
 import { registerFsRoutes } from './fsRoutes.js';
 import { registerGitRoutes } from './gitRoutes.js';
 import { registerLangRoutes } from './langRoutes.js';
@@ -41,6 +41,7 @@ export function registerOfficeRoutes(app: FastifyInstance, options: HttpServerOp
   registerLangRoutes(app, options);
   registerSkinRoutes(app, options);
   registerPrefsRoutes(app, options);
+  registerDeviceRoutes(app, options);
   // Contexto de Cubicle (carpeta de reportes) en el CLAUDE.md de todos los agentes, poco después de arrancar.
   setTimeout(() => ensureProjectContext(), 20_000).unref();
 }

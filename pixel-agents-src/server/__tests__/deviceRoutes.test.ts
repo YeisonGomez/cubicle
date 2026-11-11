@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DeviceStatusTracker, keyMatches, sortByUsage } from '../src/office/deviceRoutes.js';
+import { DeviceStatusTracker, effectiveStatus, keyMatches, sortByUsage } from '../src/office/deviceRoutes.js';
 
 describe('pantalla externa', () => {
   it('estado: sin mensajes = libre; sigue los mismos avisos que la webview', () => {
@@ -42,5 +42,12 @@ describe('pantalla externa', () => {
       ['Meal Prep', { recent: 2, total: 60 }],
     ]);
     expect(sortByUsage(list, usage).map((a) => a.name)).toEqual(['Investor Dashboard', 'Investor Core', 'Cubicle', 'Meal Prep', 'Gym']);
+  });
+  it('libre y pendiente de mirar = te necesita; trabajando o permiso no cambian', () => {
+    const pending = new Set([1]);
+    expect(effectiveStatus('idle', 1, pending)).toBe('question');
+    expect(effectiveStatus('idle', 2, pending)).toBe('idle');
+    expect(effectiveStatus('working', 1, pending)).toBe('working');
+    expect(effectiveStatus('permission', 1, pending)).toBe('permission');
   });
 });

@@ -56,6 +56,7 @@ import { getPetCount } from './office/sprites/petSpriteData.js';
 import { EditTool, type OfficeLayout, TILE_SIZE } from './office/types.js';
 import { isBrowserRuntime, isE2E } from './runtime.js';
 import { installTestHooks } from './testHooks.js';
+import { pushDeviceAttention, pushDeviceSelected } from './deviceAttention.js';
 import { transport } from './transport/index.js';
 import { TokenBanner } from './components/TokenBanner.js';
 
@@ -433,6 +434,10 @@ function App() {
     },
     [terminalAgentIds, isMobile, revealTerminal, showMobileTerminal, openAgentPanel],
   );
+
+  // Pantalla externa: el agente seleccionado (terminal abierta o personaje elegido), como en la barra.
+  const deviceSelected = (terminalAvailable ? terminalDrawer.shownAgentId : null) ?? focusedAgentId;
+  useEffect(() => pushDeviceSelected(deviceSelected), [deviceSelected]);
 
   // Pantalla externa (ESP32 en la red local): al tocar un agente, el servidor manda
   // deviceOpenAgent y aquí se abre igual que con un clic en su personaje.
@@ -924,7 +929,10 @@ function App() {
               onRest={handleRest}
               onWake={handleWake}
               onRoomInfo={setProjectRoom}
-              onUnseenChange={(ids) => getOfficeState().setAttentionIds(ids)}
+              onUnseenChange={(ids) => {
+                getOfficeState().setAttentionIds(ids);
+                pushDeviceAttention(ids);
+              }}
             />
           )}
           <div className="flex-1 min-h-0 flex">

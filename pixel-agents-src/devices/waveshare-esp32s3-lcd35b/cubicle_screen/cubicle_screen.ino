@@ -62,6 +62,8 @@ static const uint16_t C_WORK = 0x4D1F;  // azul: trabajando
 static const uint16_t C_NEED = 0xFE60;  // amarillo: te necesita
 static const uint16_t C_IDLE = 0x7BEF;  // gris: libre
 static const uint16_t C_ERR = 0xF9A6;
+static const uint16_t C_SEL = 0x7B5E;     // morado: agente seleccionado en la oficina (#7c6cf0)
+static const uint16_t C_SEL_BG = 0x292C;  // su fondo (#2b2560)
 static const uint16_t SPRITE_KEY = 0xF81F;  // transparente en los sprites
 
 // Fuentes (U8g2, con tildes y eñes).
@@ -91,7 +93,8 @@ struct Agent {
   String pokemon;
   int sprite;  // id del Pokémon, -1 si no hay
   uint16_t color;
-  char status;  // 'w' trabajando, 'p' te necesita, 'i' libre
+  bool selected;  // seleccionado en la oficina
+  char status;  // 'w' trabajando, 'p' pide permiso, 'q' te necesita (sin mirar), 'i' libre
 };
 static const int MAX_AGENTS = 48;
 Agent agents[MAX_AGENTS];
@@ -146,8 +149,8 @@ uint16_t hexTo565(const char *hex) {
   return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
 }
 
-uint16_t statusColor(char st) { return st == 'w' ? C_WORK : st == 'p' ? C_NEED : C_IDLE; }
-const char *statusLabel(char st) { return st == 'w' ? "Trabajando" : st == 'p' ? "Te necesita" : "Libre"; }
+uint16_t statusColor(char st) { return st == 'w' ? C_WORK : (st == 'p' || st == 'q') ? C_NEED : C_IDLE; }
+const char *statusLabel(char st) { return st == 'w' ? "Trabajando" : st == 'p' ? "Pide permiso" : st == 'q' ? "Te necesita" : "Libre"; }
 // Diapositivas: los agentes de una sala (consecutivos, ya ordenados por uso) no se parten
 // entre diapositivas salvo que no quepan en una.
 static const int MAX_PAGES = MAX_AGENTS;
@@ -182,6 +185,27 @@ void rebuildPages() {
   if (pageCount == 0) pageCount = 1;
 }
 int pages() { return pageCount; }
+
+// Animación al cambiar de diapositiva: la nueva entra deslizándose desde el lado.
+static const uint32_t SLIDE_MS = 220;
+uint32_t slideStart = 0;
+int slideDir = 0;  // 1 = viene de la derecha, -1 = de la izquierda
+int slideDx = 0;   // desplazamiento actual de las fichas
+
+void goToPage(int p, int dir) {
+  if (p == page || p < 0 || p >= pages()) return;
+  page = p;
+  slideDir = dir;
+  slideStart = millis();
+}
+
+/** Diapositiva del agente seleccionado en la oficina, o -1. */
+int selectedPage() {
+  for (int pg = 0; pg < pages(); pg++)
+    for (int i = pageFirst[pg]; i < pageLast[pg]; i++)
+      if (agents[i].selected) return pg;
+  return -1;
+}
 
 int textWidth(const String &s) {
   int16_t x1, y1;
@@ -365,8 +389,9 @@ bool fetchAgents() {
     g.pokemon = (const char *)(a["pokemon"] | "");
     g.sprite = a["sprite"] | -1;
     g.color = hexTo565(a["color"] | "#888888");
+    g.selected = a["selected"] | false;
     const char *st = a["status"] | "idle";
-    g.status = strcmp(st, "working") == 0 ? 'w' : strcmp(st, "permission") == 0 ? 'p' : 'i';
+    g.status = strcmp(st, "working") == 0 ? 'w' : strcmp(st, "permission") == 0 ? 'p' : strcmp(st, "question") == 0 ? 'q' : 'i';
   }
   rebuildPages();
   if (page >= pages()) page = pages() - 1;
@@ -467,7 +492,7 @@ void cellRect(int slot, int &x, int &y, int &w, int &h) {
   int col = slot % COLS, row = slot / COLS;
   w = (W - 2 * SIDE_W - GAP * (COLS + 1)) / COLS;
   h = (H - HEADER_H - FOOTER_H - GAP * (ROWS + 1)) / ROWS;
-  x = SIDE_W + GAP + col * (w + GAP);
+  x = SIDE_W + GAP + col * (w + GAP) + slideDx;
   y = HEADER_H + GAP + row * (h + GAP);
 }
 
@@ -517,7 +542,7 @@ void draw() {
   int working = 0, needs = 0;
   for (int i = 0; i < agentCount; i++) {
     if (agents[i].status == 'w') working++;
-    if (agents[i].status == 'p') needs++;
+    if (agents[i].status == 'p' || agents[i].status == 'q') needs++;
   }
   if (errorText.length()) {
     gfx->fillRect(0, 0, W, HEADER_H, C_ERR);
@@ -548,21 +573,6 @@ void draw() {
     }
   }
 
-  // Flechas laterales y puntos de diapositiva.
-  if (pages() > 1) {
-    int cy = HEADER_H + (H - HEADER_H - FOOTER_H) / 2;
-    gfx->fillRoundRect(4, HEADER_H + GAP, SIDE_W - 6, H - HEADER_H - FOOTER_H - 2 * GAP, 8, C_CARD);
-    gfx->fillRoundRect(W - SIDE_W + 2, HEADER_H + GAP, SIDE_W - 6, H - HEADER_H - FOOTER_H - 2 * GAP, 8, C_CARD);
-    drawChevron(SIDE_W / 2 - 4, cy, -1);
-    drawChevron(W - SIDE_W / 2 + 2, cy, 1);
-    int dots = pages();
-    int x = W / 2 - (dots - 1) * 8;
-    for (int i = 0; i < dots; i++) {
-      if (i == page) gfx->fillCircle(x + i * 16, H - 8, 4, C_TEXT);
-      else gfx->drawCircle(x + i * 16, H - 8, 4, C_MUTED);
-    }
-  }
-
   // Cuadrícula de la diapositiva.
   int start = pageFirst[page];
   for (int slot = 0; slot < PER_PAGE && start + slot < pageLast[page]; slot++) {
@@ -571,11 +581,14 @@ void draw() {
     cellRect(slot, x, y, w, h);
     uint16_t sc = statusColor(a.status);
     bool pressed = (start + slot) == pressedIndex;
-    gfx->fillRoundRect(x, y, w, h, 8, pressed ? C_CARD_HI : C_CARD);
-    gfx->fillRoundRect(x, y, w, 5, 2, a.color);  // color de la sala
-    if (a.status != 'i') {
-      gfx->drawRoundRect(x, y, w, h, 8, sc);
-      gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 7, sc);
+    gfx->fillRoundRect(x, y, w, h, 8, pressed ? C_CARD_HI : a.selected ? C_SEL_BG : C_CARD);
+    // Color de la sala: franja por DENTRO del borde de estado, sin taparlo.
+    gfx->fillRoundRect(x + 6, y + 4, w - 12, 4, 2, a.color);
+    // Borde: morado si es el seleccionado en la oficina; si no, el color del estado (libre sin borde).
+    if (a.selected || a.status != 'i') {
+      uint16_t bc = a.selected ? C_SEL : sc;
+      gfx->drawRoundRect(x, y, w, h, 8, bc);
+      gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 7, bc);
     }
     int cx = x + w / 2;
     Sprite *s = a.sprite >= 0 ? findSprite(a.sprite) : nullptr;
@@ -603,6 +616,24 @@ void draw() {
     gfx->setFont(F_NAME);
     gfx->setTextColor(C_MUTED);
     printCentered("Sin agentes en la oficina", W / 2, H / 2);
+  }
+
+  // Flechas laterales y puntos de diapositiva.
+  if (pages() > 1) {
+    int cy = HEADER_H + (H - HEADER_H - FOOTER_H) / 2;
+    // Por encima de las fichas que entran deslizándose.
+    gfx->fillRect(0, HEADER_H, SIDE_W, H - HEADER_H, C_BG);
+    gfx->fillRect(W - SIDE_W, HEADER_H, SIDE_W, H - HEADER_H, C_BG);
+    gfx->fillRoundRect(4, HEADER_H + GAP, SIDE_W - 6, H - HEADER_H - FOOTER_H - 2 * GAP, 8, C_CARD);
+    gfx->fillRoundRect(W - SIDE_W + 2, HEADER_H + GAP, SIDE_W - 6, H - HEADER_H - FOOTER_H - 2 * GAP, 8, C_CARD);
+    drawChevron(SIDE_W / 2 - 4, cy, -1);
+    drawChevron(W - SIDE_W / 2 + 2, cy, 1);
+    int dots = pages();
+    int x = W / 2 - (dots - 1) * 8;
+    for (int i = 0; i < dots; i++) {
+      if (i == page) gfx->fillCircle(x + i * 16, H - 8, 4, C_TEXT);
+      else gfx->drawCircle(x + i * 16, H - 8, 4, C_MUTED);
+    }
   }
 
   // Aviso temporal (p. ej. "Abriendo X").
@@ -804,6 +835,16 @@ void loop() {
   if (!touching && millis() - lastFetch > 2000) {
     lastFetch = millis();
     bool changed = fetchAgents();
+    // Si cambia el seleccionado en la oficina y está en otra diapositiva, se pasa a ella.
+    static int lastSelectedId = -1;
+    int selId = -1;
+    for (int i = 0; i < agentCount; i++)
+      if (agents[i].selected) selId = agents[i].id;
+    if (selId != lastSelectedId) {
+      lastSelectedId = selId;
+      int sp = selectedPage();
+      if (sp >= 0 && sp != page) goToPage(sp, sp > page ? 1 : -1);
+    }
     bool hasError = errorText.length() > 0;
     if (changed || hasError != hadError) dirty = true;
     hadError = hasError;
@@ -838,9 +879,9 @@ void loop() {
     bool leftZone = downX < SIDE_W && downY > HEADER_H;
     bool rightZone = downX >= W - SIDE_W && downY > HEADER_H;
     if (pages() > 1 && (rightZone || dx < -SWIPE_PX)) {
-      page = (page + 1) % pages();
+      goToPage((page + 1) % pages(), 1);
     } else if (pages() > 1 && (leftZone || dx > SWIPE_PX)) {
-      page = (page + pages() - 1) % pages();
+      goToPage((page + pages() - 1) % pages(), -1);
     } else if (pressedIndex >= 0) {
       openAgent(agents[pressedIndex]);
     }
@@ -853,6 +894,19 @@ void loop() {
   bool toastNow = millis() < toastUntil;
   if (toastNow != toastShown) dirty = true;
   toastShown = toastNow;
+
+  // Deslizamiento de la diapositiva (ease-out).
+  if (slideDir) {
+    float t = (millis() - slideStart) / (float)SLIDE_MS;
+    if (t >= 1) {
+      slideDir = 0;
+      slideDx = 0;
+    } else {
+      float e = 1 - (1 - t) * (1 - t) * (1 - t);
+      slideDx = (int)(slideDir * (W / 3) * (1 - e));
+    }
+    dirty = true;
+  }
 
   // Animación de los Pokémon: ~10 fps.
   static uint32_t lastAnim = 0;
