@@ -1,5 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { startDrag } from '../components/panel/dragGesture.js';
 
 const TERMINAL_WIDTH_KEY = 'pixel-agents.terminalWidth';
