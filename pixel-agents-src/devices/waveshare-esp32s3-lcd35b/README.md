@@ -20,7 +20,7 @@ Tus agentes de Cubicle en una pantalla táctil por Wi-Fi, en una cuadrícula de 
    arduino-cli lib install "GFX Library for Arduino@1.6.0" "TCA9554@0.1.2" "WiFiManager" "ArduinoJson" "U8g2"
    ```
 2. Conecta la pantalla con un cable USB **de datos** (si el Mac no la ve, prueba otro puerto o cable: muchos solo cargan).
-3. `./flash.sh` — compila, carga, activa la pantalla en Cubicle y le guarda servidor (`<tu-mac>.local`), puerto y clave por USB.
+3. `./flash.sh` — compila, carga, activa la pantalla en Cubicle y le guarda servidor (`<tu-mac>.local` y, de respaldo, su IP actual), puerto y clave por USB.
 4. `cubicle restart` (y "Permitir" si macOS pregunta por conexiones entrantes a `node`).
 5. Wi-Fi: la primera vez la pantalla crea la red **Cubicle-Pantalla**; conéctate desde el móvil y elige tu Wi-Fi. La contraseña se queda en la placa.
 
@@ -32,8 +32,13 @@ Después basta el cable de carga: la pantalla funciona sola por Wi-Fi.
 - Franjas con flecha a los lados (o deslizar) → diapositiva siguiente o anterior. Hasta 8 agentes por diapositiva, agrupados por sala (de la más usada a la menos en los últimos 30 días); una sala no se parte entre diapositivas si cabe en una.
 - BOOT 3 s → olvida el Wi-Fi y vuelve a abrir el portal.
 - `./flash.sh config` → solo vuelve a guardar servidor y clave (p. ej. si cambias de clave).
-- Por el puerto serie: `INFO` (estado), `WIFI_RESET`, `CFG {"host":"…","port":3101,"key":"…"}`.
+- Por el puerto serie: `INFO` (estado), `WIFI_RESET`, `CFG {"host":"…","ip":"…","port":3101,"key":"…"}`.
 
 ## Hardware
 
 Controlador AXS15231B (pantalla por QSPI 320x480 y táctil por I2C 0x3B, SDA 8 / SCL 7). Reset de la pantalla por el expansor TCA9554 (0x20, pin 1); luz de fondo en GPIO 6. ESP32-S3R8: 16 MB de flash, 8 MB de PSRAM octal.
+
+## Problemas
+
+- **Solo redes de 2,4 GHz:** la ESP32 no ve las redes de 5 GHz (a menudo las que llevan "Plus" o "5G"). Si son del mismo router, el Mac en la de 5 GHz y la pantalla en la de 2,4 GHz se ven igual.
+- **"No encuentro <tu-mac>.local":** algunos routers no dejan pasar mDNS. La pantalla usa entonces la IP guardada; si la IP del Mac cambia, `./flash.sh config` la actualiza (o reserva la IP del Mac en el router).

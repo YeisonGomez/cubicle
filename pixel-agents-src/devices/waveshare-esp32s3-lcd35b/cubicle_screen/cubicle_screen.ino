@@ -12,7 +12,7 @@
  * - Mantener BOOT 3 s borra el Wi-Fi guardado y vuelve a abrir el portal.
  *
  * Servidor, puerto y clave se guardan por el puerto serie (ver README.md):
- *   CFG {"host":"mi-mac.local","port":3101,"key":"..."}
+ *   CFG {"host":"mi-mac.local","ip":"192.168.1.10","port":3101,"key":"..."}
  *
  * Pantalla: controlador AXS15231B por QSPI (320x480) y táctil del mismo chip por I2C
  * (0x3B). El reset de la pantalla va por el expansor TCA9554 (0x20, pin 1).
@@ -75,6 +75,7 @@ bool mdnsReady = false;
 String cfgHost;
 uint16_t cfgPort = 3101;
 String cfgKey;
+String cfgIp;  // IP del Mac al configurar: respaldo si el nombre .local no responde
 IPAddress hostIp;
 
 // ── Agentes y sprites ─────────────────────────────────────────────
@@ -211,16 +212,23 @@ bool readTouch(int &x, int &y) {
 }
 
 // ── Red ───────────────────────────────────────────────────────────
+/**
+ * Dirección del Mac: la última que funcionó; si no hay, su nombre .local (mDNS) y, si
+ * no responde (pasa con algunos routers), la IP guardada al configurar.
+ */
 bool resolveHost() {
+  if (hostIp != IPAddress(0, 0, 0, 0)) return true;
   if (hostIp.fromString(cfgHost)) return true;
-  if (hostIp != IPAddress(0, 0, 0, 0)) return true;  // la última que funcionó
   if (cfgHost.endsWith(".local")) {
-    IPAddress ip = MDNS.queryHost(cfgHost.substring(0, cfgHost.length() - 6), 2000);
-    if (ip == IPAddress(0, 0, 0, 0)) return false;
-    hostIp = ip;
+    IPAddress ip = MDNS.queryHost(cfgHost.substring(0, cfgHost.length() - 6), 1500);
+    if (ip != IPAddress(0, 0, 0, 0)) {
+      hostIp = ip;
+      return true;
+    }
+  } else if (WiFi.hostByName(cfgHost.c_str(), hostIp) == 1) {
     return true;
   }
-  return WiFi.hostByName(cfgHost.c_str(), hostIp) == 1;
+  return cfgIp.length() && hostIp.fromString(cfgIp);
 }
 
 String baseUrl() { return "http://" + hostIp.toString() + ":" + String(cfgPort); }
@@ -243,7 +251,12 @@ bool fetchAgents() {
   if (code != 200) {
     errorText = code == 401 ? "Clave incorrecta" : code < 0 ? "Cubicle no responde" : "Error " + String(code);
     http.end();
-    if (code < 0) hostIp = IPAddress(0, 0, 0, 0);  // volver a resolver (la IP del Mac puede cambiar)
+    // Tras varios fallos seguidos se vuelve a buscar el Mac (su IP puede haber cambiado).
+    static int fails = 0;
+    if (code < 0 && ++fails >= 3) {
+      fails = 0;
+      hostIp = IPAddress(0, 0, 0, 0);
+    }
     return false;
   }
   String body = http.getString();
@@ -532,6 +545,7 @@ void loadConfig() {
   cfgHost = prefs.getString("host", "");
   cfgPort = prefs.getUShort("port", 3101);
   cfgKey = prefs.getString("key", "");
+  cfgIp = prefs.getString("ip", "");
   prefs.end();
 }
 
@@ -549,14 +563,15 @@ void handleSerial() {
     prefs.putString("host", (const char *)(doc["host"] | ""));
     prefs.putUShort("port", doc["port"] | 3101);
     prefs.putString("key", (const char *)(doc["key"] | ""));
+    prefs.putString("ip", (const char *)(doc["ip"] | ""));
     prefs.end();
     loadConfig();
     hostIp = IPAddress(0, 0, 0, 0);
     lastPayload = "";
     Serial.println("OK");
   } else if (line == "INFO") {
-    Serial.printf("host=%s port=%u key=%s wifi=%s ip=%s agents=%d\n", cfgHost.c_str(), cfgPort, cfgKey.length() ? "(guardada)" : "(vacia)",
-                  WiFi.status() == WL_CONNECTED ? WiFi.SSID().c_str() : "-", WiFi.localIP().toString().c_str(), agentCount);
+    Serial.printf("host=%s mac=%s backup=%s port=%u key=%s wifi=%s ip=%s agents=%d err=%s\n", cfgHost.c_str(), hostIp.toString().c_str(), cfgIp.c_str(), cfgPort, cfgKey.length() ? "(guardada)" : "(vacia)",
+                  WiFi.status() == WL_CONNECTED ? WiFi.SSID().c_str() : "-", WiFi.localIP().toString().c_str(), agentCount, errorText.c_str());
   } else if (line == "WIFI_RESET") {
     wm.resetSettings();
     Serial.println("OK");

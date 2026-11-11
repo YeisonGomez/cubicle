@@ -50,10 +50,13 @@ fi
 
 P="$(port)"
 HOST="$(scutil --get LocalHostName 2>/dev/null || hostname -s).local"
-LINE="$(python3 - "$CFG" "$HOST" <<'PY'
+# IP de respaldo: la de la interfaz de la ruta por defecto (Wi-Fi o cable).
+IFACE="$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')"
+IP="$(ipconfig getifaddr "${IFACE:-en0}" 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || true)"
+LINE="$(python3 - "$CFG" "$HOST" "$IP" <<'PY'
 import json, sys
 c = json.load(open(sys.argv[1]))
-print("CFG " + json.dumps({"host": sys.argv[2], "port": c.get("port", 3101), "key": c["key"]}))
+print("CFG " + json.dumps({"host": sys.argv[2], "ip": sys.argv[3], "port": c.get("port", 3101), "key": c["key"]}))
 PY
 )"
 stty -f "$P" 115200 2>/dev/null || stty -F "$P" 115200
@@ -63,7 +66,7 @@ REPLY=""
 read -r -t 5 REPLY <&3 || true
 exec 3>&-
 if [[ "$REPLY" == OK* ]]; then
-  echo "Pantalla configurada: servidor $HOST, puerto $(python3 -c "import json;print(json.load(open('$CFG')).get('port',3101))")."
+  echo "Pantalla configurada: servidor $HOST (respaldo ${IP:-sin IP}), puerto $(python3 -c "import json;print(json.load(open('$CFG')).get('port',3101))")."
 else
   echo "La pantalla no confirmó la configuración (respuesta: '${REPLY:-nada}'). Vuelve a ejecutar: ./flash.sh config" >&2
   exit 1
