@@ -74,6 +74,7 @@ Preferences prefs;
 WiFiManager wm;
 WebServer web(80);  // GET /info: estado y acelerómetro (diagnóstico, sin datos sensibles)
 bool netReady = false;
+bool pendingRedraw = false;  // pedido desde fuera del bucle (p. ej. /rotate)
 bool portalOpen = false;
 bool mdnsReady = false;
 String cfgHost;
@@ -126,15 +127,16 @@ static const int SCALE = 3;  // sprites de 32 px → 96 px
 static const int SWIPE_PX = 50;
 
 // ── Orientación: 1 = horizontal normal, 3 = horizontal al revés ─────
-// Se elige sola con el acelerómetro (QMI8658 por I2C) y, a mano, con un toque corto en BOOT.
+// A mano (toque corto en BOOT o GET /rotate) se guarda y es la que vale con la pantalla
+// tumbada; el acelerómetro (QMI8658 por I2C) solo la cambia si está claramente de pie.
 int rotation = 1;
-bool rotationManual = false;  // tras un toque en BOOT, manda el usuario hasta reiniciar
+bool rotationManual = false;  // compat. con /info: true si la última la eligió el usuario
 uint8_t imuAddr = 0;          // 0 = sin sensor
 // Eje del acelerómetro que apunta a lo largo de la pantalla y signo con el que la
 // gravedad indica "al derecho" (rotación 1). Calibrado sobre la placa real.
-static const int IMU_AXIS = 0;  // 0 = x, 1 = y
-static const int IMU_SIGN_UPRIGHT = 1;
-static const int16_t IMU_THRESHOLD = 4000;  // ~0,25 g: por debajo, plana o dudosa → no se cambia
+static const int IMU_AXIS = 1;  // 0 = x, 1 = y
+static const int IMU_SIGN_UPRIGHT = -1;
+static const int16_t IMU_THRESHOLD = 6000;  // ~0,37 g: por debajo, tumbada o dudosa → la guardada
 
 // ── Utilidades ────────────────────────────────────────────────────
 uint16_t hexTo565(const char *hex) {
@@ -283,6 +285,15 @@ int rotationFromImu() {
 void applyRotation(int r) {
   rotation = r;
   gfx->setRotation(r);
+}
+
+/** Giro elegido a mano: se aplica y se guarda. */
+void setManualRotation(int r) {
+  rotationManual = true;
+  applyRotation(r);
+  prefs.begin("cubicle", false);
+  prefs.putUChar("rot", r);
+  prefs.end();
 }
 
 // ── Red ───────────────────────────────────────────────────────────
@@ -673,6 +684,11 @@ void startNetServices() {
              rotation, rotationManual ? "true" : "false", imu ? "true" : "false", ax, ay, az, agentCount, errorText.c_str());
     web.send(200, "application/json", out);
   });
+  web.on("/rotate", []() {
+    setManualRotation(rotation == 1 ? 3 : 1);
+    pendingRedraw = true;
+    web.send(200, "application/json", String("{\"rotation\":") + rotation + "}");
+  });
   web.begin();
 }
 
@@ -701,8 +717,11 @@ void setup() {
   pinMode(PIN_BOOT, INPUT_PULLUP);
   initDisplay();
   initImu();
+  prefs.begin("cubicle", true);
+  int saved = prefs.getUChar("rot", 1);
+  prefs.end();
   int r = rotationFromImu();
-  if (r) applyRotation(r);
+  applyRotation(r ? r : (saved == 3 ? 3 : 1));
   loadConfig();
 
   drawMessage("Cubicle", "Conectando al Wi-Fi...");
@@ -753,8 +772,7 @@ void loop() {
     }
   } else {
     if (bootSince && millis() - bootSince > 30 && millis() - bootSince < 1000) {
-      rotationManual = true;
-      applyRotation(rotation == 1 ? 3 : 1);
+      setManualRotation(rotation == 1 ? 3 : 1);
       dirtyRot = true;
     }
     bootSince = 0;
@@ -763,7 +781,7 @@ void loop() {
   // Giro automático: la misma orientación durante ~1 s seguido (sin saltos al moverla).
   static uint32_t lastImu = 0, wantSince = 0;
   static int want = 0;
-  if (!rotationManual && imuAddr && millis() - lastImu > 250) {
+  if (imuAddr && millis() - lastImu > 250) {
     lastImu = millis();
     int r = rotationFromImu();
     if (r == 0 || r == rotation) {
@@ -773,6 +791,7 @@ void loop() {
       wantSince = millis();
     } else if (millis() - wantSince > 1000) {
       applyRotation(r);
+      rotationManual = false;
       want = 0;
       dirtyRot = true;
     }
@@ -842,8 +861,9 @@ void loop() {
     dirty = true;
   }
 
-  if (dirtyRot) {
+  if (dirtyRot || pendingRedraw) {
     dirtyRot = false;
+    pendingRedraw = false;
     dirty = true;
   }
   if (dirty) {

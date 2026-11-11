@@ -46,9 +46,10 @@ if [[ "${1:-}" == "ota" ]]; then
   KEY="$(python3 -c "import json;print(json.load(open('$CFG'))['key'])")"
   BUILD="$(mktemp -d)"
   arduino-cli compile --fqbn "$FQBN" --output-dir "$BUILD" "$SKETCH"
-  ESPOTA="$(ls -d "$HOME"/Library/Arduino15/packages/esp32/hardware/esp32/*/tools/espota.py "$HOME"/.arduino15/packages/esp32/hardware/esp32/*/tools/espota.py 2>/dev/null | tail -1)"
+  ESPOTA="$( (ls -d "$HOME"/Library/Arduino15/packages/esp32/hardware/esp32/*/tools/espota.py "$HOME"/.arduino15/packages/esp32/hardware/esp32/*/tools/espota.py 2>/dev/null || true) | tail -1)"
+  [[ -n "$ESPOTA" ]] || { echo "No encuentro espota.py (core esp32 de arduino-cli)." >&2; exit 1; }
   TARGET="${OTA_HOST:-cubicle-pantalla.local}"
-  python3 "$ESPOTA" -i "$TARGET" -a "$KEY" -f "$BUILD/cubicle_screen.ino.bin" -r
+  python3 "$ESPOTA" -i "$TARGET" -a "$KEY" -f "$BUILD/cubicle_screen.ino.bin" -r 2>&1 | tr "\r" "\n" | grep -v "^Uploading" || true
   rm -rf "$BUILD"
   echo "Pantalla actualizada por Wi-Fi ($TARGET)."
   exit 0
