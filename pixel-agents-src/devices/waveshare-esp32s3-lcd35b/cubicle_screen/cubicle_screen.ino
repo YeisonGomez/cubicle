@@ -740,8 +740,16 @@ void drawMessage(const char *title, const String &line1, const String &line2 = "
 
 /** Botón de la cabecera (derecha) para alternar ACTIVOS / TODOS. Devuelve su ancho. */
 int drawToggle() {
-  if (activeCount() == 0) return 0;
   gfx->setFont(F_SMALL);
+  if (activeCount() == 0) {
+    // Sin activos no hay vista de activos: se dice, en vez de dejar la cabecera sin botón.
+    String none = T("Ningún agente activo", "No active agents");
+    int tw = textWidth(none);
+    gfx->setTextColor(C_MUTED);
+    gfx->setCursor(W - 10 - tw, 19);
+    gfx->print(none);
+    return tw + 14;
+  }
   String label = mode == MODE_FOCUS ? T("Ver todos", "Show all") : T("Ver activos", "Show active");
   int tw = textWidth(label);
   int bw = tw + 20;
