@@ -8,8 +8,9 @@
  *   con su Pokémon animado y cuánto llevan en ese estado.
  * - TODOS: cuadrícula 4x2 por diapositiva, agrupada por sala y ordenada por uso (orden
  *   del servidor). Se alterna con ACTIVOS tocando la cabecera.
- * - REPOSO: tras 5 min sin agentes activos ni toques: reloj, prompts de hoy y consumo
- *   de la semana y de Fable, con la luz atenuada. Un toque vuelve a TODOS.
+ * - RESUMEN: la vista simplificada cuando no hay activos: reloj, prompts de hoy y consumo
+ *   de la semana y de Fable. Tocar lleva a TODOS. Tras 5 min sin activos ni toques se
+ *   atenúa la luz (y TODOS vuelve al resumen); el primer toque solo la despierta.
  * - AVISO: cuando un agente termina o pide permiso, pantalla completa unos segundos con
  *   su Pokémon y un borde que parpadea. Tocarlo abre el agente.
  *
@@ -152,6 +153,7 @@ uint32_t lastActivityMs = 0;  // último toque o último momento con agentes act
 static const uint32_t REST_AFTER_MS = 5UL * 60UL * 1000UL;
 static const int BL_FULL = 255;
 static const int BL_REST = 40;
+bool dimmed = false;  // luz atenuada: 5 min sin activos ni toques
 uint32_t previewRestUntil = 0;  // GET /preview?v=rest: enseña el reposo unos segundos (diagnóstico)
 
 // Lo que se muestra: índices de agents[] y sus diapositivas [first, last) sobre view[].
@@ -286,10 +288,17 @@ bool rebuildView() {
     lastActivityMs = millis();
     mode = userAll ? MODE_GRID : MODE_FOCUS;
   } else {
-    userAll = false;
-    mode = millis() - lastActivityMs > REST_AFTER_MS ? MODE_REST : MODE_GRID;
+    // Sin activos, la vista simplificada es el resumen (reloj y consumo). TODOS se queda
+    // mientras se use; tras 5 min sin toques vuelve al resumen y se atenúa la luz.
+    if (userAll && millis() - lastActivityMs > REST_AFTER_MS) userAll = false;
+    mode = userAll ? MODE_GRID : MODE_REST;
   }
   if (millis() < previewRestUntil) mode = MODE_REST;
+  bool dim = active == 0 && millis() - lastActivityMs > REST_AFTER_MS;
+  if (dim != dimmed) {
+    dimmed = dim;
+    analogWrite(PIN_BL, dim ? BL_REST : BL_FULL);
+  }
 
   viewCount = 0;
   pageCount = 0;
@@ -347,7 +356,6 @@ bool rebuildView() {
     page = 0;
     slideDir = 0;
     slideDx = 0;
-    analogWrite(PIN_BL, mode == MODE_REST ? BL_REST : BL_FULL);
   }
   if (page >= pageCount) page = pageCount - 1;
   return mode != before;
@@ -741,16 +749,7 @@ void drawMessage(const char *title, const String &line1, const String &line2 = "
 /** Botón de la cabecera (derecha) para alternar ACTIVOS / TODOS. Devuelve su ancho. */
 int drawToggle() {
   gfx->setFont(F_SMALL);
-  if (activeCount() == 0) {
-    // Sin activos no hay vista de activos: se dice, en vez de dejar la cabecera sin botón.
-    String none = T("Ningún agente activo", "No active agents");
-    int tw = textWidth(none);
-    gfx->setTextColor(C_MUTED);
-    gfx->setCursor(W - 10 - tw, 19);
-    gfx->print(none);
-    return tw + 14;
-  }
-  String label = mode == MODE_FOCUS ? T("Ver todos", "Show all") : T("Ver activos", "Show active");
+  String label = mode == MODE_GRID ? T("Ver activos", "Show active") : T("Ver todos", "Show all");
   int tw = textWidth(label);
   int bw = tw + 20;
   gfx->fillRoundRect(W - 8 - bw, 4, bw, 22, 11, C_CARD_HI);
@@ -905,7 +904,8 @@ void drawRest() {
   drawMeter(x0 + 2 * (cw + gap), y, cw, "Fable", sumFable);
   gfx->setFont(F_SMALL);
   gfx->setTextColor(C_MUTED);
-  printCentered(T("Nadie te necesita. Toca para ver tus agentes.", "Nobody needs you. Tap to see your agents."), W / 2, H - 16);
+  printCentered(T("Ningún agente activo. Nadie te necesita.", "No active agents. Nobody needs you."), W / 2, H - 16);
+  drawToggle();
 }
 
 /** Aviso a pantalla completa: el agente que terminó o pide permiso. */
@@ -1266,14 +1266,13 @@ void loop() {
       alertAgentId = -1;
       consumed = true;
       if (a) openAgent(*a);
-    } else if (mode == MODE_REST) {
-      rebuildView();
+    } else if (dimmed) {
+      rebuildView();  // solo despierta (sube la luz)
       consumed = true;
-    } else if (y < HEADER_H + 4) {
-      if (activeCount() > 0) {
-        userAll = !userAll;
-        rebuildView();
-      }
+    } else if (mode == MODE_REST || y < HEADER_H + 4) {
+      // Cabecera (o cualquier punto del resumen): alterna la vista simplificada y TODOS.
+      userAll = !userAll;
+      rebuildView();
       consumed = true;
     } else {
       for (int slot = 0; slot < perPage(); slot++) {
