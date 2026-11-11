@@ -1,0 +1,214 @@
+/**
+ * Pantalla externa (p. ej. una ESP32 con LCD táctil) en la red local: ve los
+ * agentes y su estado y, al tocar uno, lo abre en el computador.
+ *
+ * Es un servidor HTTP APARTE y mínimo, nunca el de la oficina: el de la oficina
+ * lleva la terminal (una shell) y solo escucha en 127.0.0.1. Este solo expone
+ * dos rutas, pide una clave propia (cabecera `X-Cubicle-Key`) y está apagado
+ * hasta que `oficina/dispositivo.json` tenga `"enabled": true`.
+ *
+ *   GET  /device/agents          → { agents: [{ id, name, room, color, status, pokemon? }] }
+ *   POST /device/open  {"id": n} → la webview abre ese agente y el navegador pasa al frente
+ */
+import { execFile } from 'child_process';
+import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as http from 'http';
+import * as path from 'path';
+
+import type { AgentStateStore } from '../agentStateStore.js';
+import { officeDir } from '../officePaths.js';
+import { resolveSkin } from './skinRoutes.js';
+
+export const DEVICE_PORT_DEFAULT = 3101;
+/** Color de una sala sin color propio (gris neutro). */
+// eslint-disable-next-line pixel-agents/no-inline-colors -- color de datos (salas), no de la UI
+const ROOM_COLOR_FALLBACK = '#888888';
+
+interface DeviceConfig {
+  enabled: boolean;
+  key: string;
+  port: number;
+}
+
+export type DeviceStatus = 'working' | 'permission' | 'idle';
+
+export interface DeviceAgent {
+  id: number;
+  name: string;
+  room: string;
+  color: string;
+  status: DeviceStatus;
+  pokemon?: string;
+}
+
+const configFile = (): string => path.join(officeDir(), 'dispositivo.json');
+
+/** Lee la config; si está activada y sin clave, genera una y la guarda. */
+export function readDeviceConfig(): DeviceConfig | null {
+  let raw: Partial<DeviceConfig>;
+  try {
+    raw = JSON.parse(fs.readFileSync(configFile(), 'utf8')) as Partial<DeviceConfig>;
+  } catch {
+    return null;
+  }
+  if (raw.enabled !== true) return null;
+  const cfg: DeviceConfig = {
+    enabled: true,
+    key: typeof raw.key === 'string' && raw.key.length >= 16 ? raw.key : crypto.randomBytes(16).toString('hex'),
+    port: Number.isInteger(raw.port) ? (raw.port as number) : DEVICE_PORT_DEFAULT,
+  };
+  if (cfg.key !== raw.key || cfg.port !== raw.port) fs.writeFileSync(configFile(), JSON.stringify(cfg, null, 2));
+  return cfg;
+}
+
+/** Comparación en tiempo constante de la clave. */
+export function keyMatches(given: string | string[] | undefined, expected: string): boolean {
+  if (typeof given !== 'string') return false;
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+/**
+ * Estado de cada agente tal como lo ve la oficina: se deduce de los mismos mensajes
+ * que recibe la webview (sin mensajes aún = Libre, como el punto vacío de la ficha).
+ * Leer `isWaiting` del agente no sirve: al reanudar vale false y salían todos "Trabajando".
+ */
+export class DeviceStatusTracker {
+  private readonly statuses = new Map<number, DeviceStatus>();
+
+  onMessage(m: Record<string, unknown>): void {
+    const id = m.id;
+    if (typeof id !== 'number') return;
+    switch (m.type) {
+      case 'agentStatus':
+        if (m.status === 'active') this.statuses.set(id, 'working');
+        else if (m.status === 'waiting') this.statuses.set(id, 'idle');
+        break;
+      case 'agentToolStart':
+        if (m.runInBackground !== true) this.statuses.set(id, m.permissionActive === true ? 'permission' : 'working');
+        break;
+      case 'agentToolPermission':
+        this.statuses.set(id, 'permission');
+        break;
+      case 'agentToolPermissionClear':
+        if (this.statuses.get(id) === 'permission') this.statuses.set(id, 'working');
+        break;
+      case 'agentClosed':
+        this.statuses.delete(id);
+        break;
+    }
+  }
+
+  get(id: number): DeviceStatus {
+    return this.statuses.get(id) ?? 'idle';
+  }
+}
+
+function rooms(): Map<string, string> {
+  try {
+    const of = JSON.parse(fs.readFileSync(path.join(officeDir(), 'oficinas.json'), 'utf8')) as { salas?: Array<{ label: string; color?: string }> };
+    return new Map((of.salas ?? []).map((s) => [s.label, s.color ?? ROOM_COLOR_FALLBACK]));
+  } catch {
+    return new Map();
+  }
+}
+
+/** Agentes con nombre (uno por Directorio: el de id más bajo), ordenados por sala y nombre. */
+export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTracker, areaOf: (name: string) => string | undefined): DeviceAgent[] {
+  const colors = rooms();
+  let pokemon: Record<string, { name: string }> = {};
+  try {
+    const skin = resolveSkin();
+    if (skin.theme === 'pokemon') pokemon = skin.agents;
+  } catch {
+    /* sin skin */
+  }
+  const byName = new Map<string, DeviceAgent>();
+  for (const a of store.values()) {
+    const name = a.directoryName;
+    if (!name || (byName.get(name)?.id ?? Infinity) < a.id) continue;
+    const room = areaOf(name) ?? '';
+    byName.set(name, { id: a.id, name, room, color: colors.get(room) ?? ROOM_COLOR_FALLBACK, status: tracker.get(a.id), ...(pokemon[name] ? { pokemon: pokemon[name].name } : {}) });
+  }
+  return [...byName.values()].sort((x, y) => x.room.localeCompare(y.room) || x.name.localeCompare(y.name));
+}
+
+/** macOS: pone al frente la pestaña de Cubicle en Chrome (o lo abre en el navegador). */
+function raiseBrowser(officePort: number): void {
+  // OFICINA_NO_RAISE=1 en pruebas: no tocar el navegador del usuario.
+  if (process.platform !== 'darwin' || process.env.OFICINA_NO_RAISE === '1') return;
+  const script = `
+    set found to false
+    if application "Google Chrome" is running then
+      tell application "Google Chrome"
+        repeat with w in windows
+          set i to 0
+          repeat with t in tabs of w
+            set i to i + 1
+            if (URL of t contains "127.0.0.1:${officePort}") or (URL of t contains "localhost:${officePort}") then
+              set active tab index of w to i
+              set index of w to 1
+              activate
+              set found to true
+              exit repeat
+            end if
+          end repeat
+          if found then exit repeat
+        end repeat
+      end tell
+    end if
+    return found`;
+  execFile('osascript', ['-e', script], { timeout: 5000 }, (err, stdout) => {
+    if (err || stdout.trim() !== 'true') execFile('open', [`http://127.0.0.1:${officePort}/`], () => undefined);
+  });
+}
+
+function readBody(req: http.IncomingMessage): Promise<string> {
+  return new Promise((resolve) => {
+    let body = '';
+    req.on('data', (c: Buffer) => {
+      body += c.toString();
+      if (body.length > 4096) req.destroy();
+    });
+    req.on('end', () => resolve(body));
+    req.on('error', () => resolve(''));
+  });
+}
+
+/** Arranca el servidor de la pantalla si está activado. Devuelve el servidor o null. */
+export function startDeviceServer(store: AgentStateStore, officePort: number, areaOf: (name: string) => string | undefined): http.Server | null {
+  const cfg = readDeviceConfig();
+  if (!cfg) return null;
+  const tracker = new DeviceStatusTracker();
+  store.on('broadcast', (m: Record<string, unknown>) => tracker.onMessage(m));
+  const send = (res: http.ServerResponse, code: number, data: unknown) => {
+    res.writeHead(code, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(data));
+  };
+  const server = http.createServer((req, res) => {
+    void (async () => {
+      if (!keyMatches(req.headers['x-cubicle-key'], cfg.key)) return send(res, 401, { error: 'unauthorized' });
+      if (req.method === 'GET' && req.url === '/device/agents') {
+        return send(res, 200, { agents: listDeviceAgents(store, tracker, areaOf) });
+      }
+      if (req.method === 'POST' && req.url === '/device/open') {
+        let id: unknown;
+        try {
+          id = (JSON.parse(await readBody(req)) as { id?: unknown }).id;
+        } catch {
+          id = undefined;
+        }
+        if (typeof id !== 'number' || !store.has(id)) return send(res, 404, { error: 'agent not found' });
+        store.broadcast({ type: 'deviceOpenAgent', id });
+        raiseBrowser(officePort);
+        return send(res, 200, { ok: true });
+      }
+      return send(res, 404, { error: 'not found' });
+    })();
+  });
+  server.on('error', (e) => console.error(`[Cubicle] Pantalla externa: no se pudo abrir el puerto ${cfg.port}: ${e.message}`));
+  server.listen(cfg.port, '0.0.0.0', () => console.log(`[Cubicle] Pantalla externa escuchando en el puerto ${cfg.port}`));
+  return server;
+}

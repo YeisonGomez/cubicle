@@ -257,7 +257,7 @@ export function assignPokemon(
 }
 
 /** Estado resuelto para la webview y Ajustes. Asigna (y guarda) lo que falte. */
-function resolve(): {
+export function resolveSkin(): {
   theme: Theme;
   types: Array<{ id: string; es: string; en: string; color: string }>;
   rooms: Record<string, string>;
@@ -350,7 +350,7 @@ function resolve(): {
 }
 
 export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOptions): void {
-  app.get('/api/skin', async () => resolve());
+  app.get('/api/skin', async () => resolveSkin());
   // La animación de evolución ya se mostró: el agente pasa a esa forma.
   app.post<{ Body: { agent?: string; stage?: number } }>('/api/skin/evolved', { preHandler: bearerAuth(options.token) }, async (request, reply) => {
     const { agent, stage } = request.body ?? {};
@@ -358,7 +358,7 @@ export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOpti
     const skin = readSkin();
     skin.seen[agent] = Math.max(skin.seen[agent] ?? 0, stage);
     writeSkin(skin);
-    return reply.send(resolve());
+    return reply.send(resolveSkin());
   });
   // La animación de ascenso ya se mostró.
   app.post<{ Body: { agent?: string; rank?: number } }>('/api/skin/promoted', { preHandler: bearerAuth(options.token) }, async (request, reply) => {
@@ -367,7 +367,7 @@ export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOpti
     const skin = readSkin();
     skin.rankSeen[agent] = Math.max(skin.rankSeen[agent] ?? 0, rank);
     writeSkin(skin);
-    return reply.send(resolve());
+    return reply.send(resolveSkin());
   });
   // Cambiar tema, tipo de una sala o volver a sortear agentes. Luego `proyecto.py aplicar`
   // recolorea las salas (colores y pisos por tipo) y lo empuja a la oficina en vivo.
@@ -398,7 +398,7 @@ export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOpti
         skin.seen = {};
       } else if (Array.isArray(b.reshuffle)) for (const n of b.reshuffle) forget(skin, n);
       writeSkin(skin);
-      const out = resolve();
+      const out = resolveSkin();
       void runProyecto(options, ['aplicar']).then((r) => {
         if (!r.ok) console.warn('[skin] aplicar falló:', r.log.slice(-400));
       });

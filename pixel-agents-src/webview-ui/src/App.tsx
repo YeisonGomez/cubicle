@@ -434,6 +434,22 @@ function App() {
     [terminalAgentIds, isMobile, revealTerminal, showMobileTerminal, openAgentPanel],
   );
 
+  // Pantalla externa (ESP32 en la red local): al tocar un agente, el servidor manda
+  // deviceOpenAgent y aquí se abre igual que con un clic en su personaje.
+  const deviceOpenRef = useRef(handleClick);
+  deviceOpenRef.current = handleClick;
+  useEffect(
+    () =>
+      transport.onMessage((msg) => {
+        const m = msg as { type?: string; id?: unknown };
+        if (m.type !== 'deviceOpenAgent' || typeof m.id !== 'number') return;
+        setProjectRoom(null);
+        getOfficeState().selectAndFollow(m.id);
+        deviceOpenRef.current(m.id);
+      }),
+    [],
+  );
+
   // Card click when there is no terminal pane to switch (VS Code, or a
   // watch-only standalone session): ask the host to raise the agent's own
   // terminal — VS Code shows the editor terminal, standalone has nothing to

@@ -18,7 +18,7 @@ import {
   WS_CLOSE_FORBIDDEN_ORIGIN,
   WS_CLOSE_UNAUTHORIZED,
 } from './constants.js';
-import { registerOfficeRoutes, setListeningPort } from './office/index.js';
+import { registerOfficeRoutes, setListeningPort, startOfficeDevice } from './office/index.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
 import { registerTerminalRoutes } from './terminal/terminalRoutes.js';
 import type { AgentState } from './types.js';
@@ -123,6 +123,7 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
   const address = app.server.address();
   const port = typeof address === 'object' ? (address?.port ?? 0) : 0;
   setListeningPort(port);
+  startOfficeDevice(app, options, port);
 
   return { app, port };
 }
