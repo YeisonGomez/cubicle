@@ -61,6 +61,8 @@ export interface SkinFile {
 export interface AgentRank {
   level: number;
   xp: number;
+  /** Prompts humanos de este agente en total (el logro que se muestra al ascender). */
+  prompts: number;
   levelXp: number;
   nextXp: number;
   rank: number;
@@ -85,6 +87,8 @@ export interface AgentSkin {
   walk: string;
   level: number;
   xp: number;
+  /** Prompts humanos de este agente en total (el logro que se muestra al evolucionar). */
+  prompts: number;
   /** Experiencia al empezar este nivel y para el siguiente (igual a xp en el nivel 100). */
   levelXp: number;
   nextXp: number;
@@ -306,7 +310,7 @@ function resolve(): {
     }
     const xp = xpFromDays(prompts[d.name]);
     const level = levelForXp(xp);
-    const progress = { level, xp, levelXp: xpForLevel(level), nextXp: level >= MAX_LEVEL ? xp : xpForLevel(level + 1) };
+    const progress = { level, xp, prompts: Math.round(xp / XP_PER_PROMPT), levelXp: xpForLevel(level), nextXp: level >= MAX_LEVEL ? xp : xpForLevel(level + 1) };
     const stage = stageForLevel(level, path.length);
     // La primera vez se parte de la forma y el rango que ya corresponden, sin animación.
     const seen = Math.min(skin.seen[d.name] ?? stage, stage);

@@ -187,6 +187,7 @@ export const es: Record<string, string> = {
   'xp.leftOne': 'Falta 1 prompt',
   'pokemon.toEvolve': 'Faltan {n} prompts para evolucionar',
   'rank.toNext': 'Faltan {n} prompts para ascender',
+  'achievement.prompts': 'Logro: {n} prompts con este agente',
   'evolution.close': 'Cerrar',
   'pokemon.noEvolve': 'Ya no evoluciona: sigue subiendo hasta el nivel 100',
   'rank.intern': 'Practicante',

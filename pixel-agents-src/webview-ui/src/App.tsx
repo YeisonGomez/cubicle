@@ -11,6 +11,7 @@ import { EditActionBar } from './components/EditActionBar.js';
 import { IntroBubble } from './components/IntroBubble.js';
 import { MigrationNotice } from './components/MigrationNotice.js';
 import { syncLangToServer } from './i18n/index.js';
+import { agentStarts } from './agentStarts.js';
 import { loadSkin, markPrompted, useSkin } from './skin.js';
 import { OnboardingModal } from './components/OnboardingModal.js';
 import { authHeaders } from './components/panel/api.js';
@@ -379,9 +380,7 @@ function App() {
     // Activo = sin entrada en agentStatuses (useExtensionMessages la borra): empezó a
     // trabajar quien tenía estado (libre/esperando) y ya no lo tiene, y sigue en la oficina.
     const os = getOfficeState();
-    const started = Object.keys(prevStatuses.current)
-      .map(Number)
-      .filter((id) => prevStatuses.current[id] !== 'active' && !(id in agentStatuses) && os.characters.has(id));
+    const started = agentStarts(prevStatuses.current, agentStatuses, (id) => os.characters.has(id));
     prevStatuses.current = agentStatuses;
     if (started.length === 0) return;
     for (const id of started) {

@@ -20,6 +20,7 @@ export interface AgentSkin {
   walk: string;
   level: number;
   xp: number;
+  prompts?: number;
   levelXp: number;
   nextXp: number;
   evolvesAt: number | null;
@@ -31,6 +32,7 @@ export interface AgentSkin {
 export interface AgentRank {
   level: number;
   xp: number;
+  prompts?: number;
   levelXp: number;
   nextXp: number;
   rank: number;

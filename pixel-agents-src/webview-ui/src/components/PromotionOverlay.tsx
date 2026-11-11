@@ -1,3 +1,4 @@
+import { Trophy } from 'lucide-react';
 import type { MutableRefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -17,7 +18,7 @@ const CONFETTI_COLORS = ['bg-xp', 'bg-accent-bright', 'bg-status-success', 'bg-s
  */
 export function PromotionOverlay({ getOfficeState, panRef, paused }: { getOfficeState: () => OfficeState; panRef: MutableRefObject<{ x: number; y: number }>; paused: boolean }) {
   const { t } = useT();
-  const [current, setCurrent] = useState<{ agent: string; rank: number } | null>(null);
+  const [current, setCurrent] = useState<{ agent: string; rank: number; prompts?: number } | null>(null);
   const played = useRef(new Set<string>());
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export function PromotionOverlay({ getOfficeState, panRef, paused }: { getOffice
         if ([...os.characters.values()].some((c) => c.directoryName === agent && !c.isSubagent)) {
           played.current.add(`${agent}:${a.promoted.rank}`);
           clearPrompted(agent);
-          setCurrent({ agent, rank: a.promoted.rank });
+          setCurrent({ agent, rank: a.promoted.rank, prompts: a.prompts });
           return;
         }
       }
@@ -69,6 +70,12 @@ export function PromotionOverlay({ getOfficeState, panRef, paused }: { getOffice
       <div className="mb-[10%] max-w-[90%] bg-bg-dark border-2 border-border px-24 py-16 text-text text-center text-[24px] leading-snug" style={{ boxShadow: 'var(--shadow-pixel)' }}>
         <div className="text-text-muted text-[16px] mb-6">{current.agent}</div>
         {t('promotion.done', { rank: t(RANK_KEYS[current.rank]) })}
+        {current.prompts ? (
+          <div className="mt-10 flex items-center justify-center gap-6 text-xp text-[18px]">
+            <Trophy size={18} />
+            {t('achievement.prompts', { n: current.prompts.toLocaleString() })}
+          </div>
+        ) : null}
         <button type="button" className="pointer-events-auto mt-14 block mx-auto px-16 py-6 bg-accent text-white text-[16px] hover:bg-accent-bright" onClick={() => setCurrent(null)}>
           {t('evolution.close')}
         </button>

@@ -1,3 +1,4 @@
+import { Trophy } from 'lucide-react';
 import type { MutableRefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -8,7 +9,7 @@ import type { OfficeState } from '../office/engine/officeState.js';
 import { ackEvolution, clearPrompted, getSkin, wasPrompted, type AgentSkin } from '../skin.js';
 import { spotlightAgent } from './spotlightAgent.js';
 
-type Evolving = NonNullable<AgentSkin['evolving']> & { agent: string };
+type Evolving = NonNullable<AgentSkin['evolving']> & { agent: string; prompts?: number };
 type Phase = 'intro' | 'flicker' | 'flash' | 'done';
 
 function load(url: string): Promise<void> {
@@ -44,7 +45,7 @@ export function EvolutionOverlay({ getOfficeState, panRef, paused }: { getOffice
         if ([...os.characters.values()].some((c) => c.directoryName === agent && !c.isSubagent)) {
           played.current.add(`${agent}:${a.evolving.stage}`);
           clearPrompted(agent);
-          setCurrent({ ...a.evolving, agent });
+          setCurrent({ ...a.evolving, agent, prompts: a.prompts });
           return;
         }
       }
@@ -123,6 +124,12 @@ export function EvolutionOverlay({ getOfficeState, panRef, paused }: { getOffice
       <div className="absolute bottom-[10%] max-w-[90%] bg-bg-dark border-2 border-border px-24 py-16 text-text text-center text-[24px] leading-snug" style={{ boxShadow: 'var(--shadow-pixel)' }}>
         <div className="text-text-muted text-[16px] mb-6">{current.agent}</div>
         {phase === 'done' ? t('evolution.done', { from: current.fromName, to: current.toName }) : t('evolution.start', { from: current.fromName })}
+        {phase === 'done' && current.prompts ? (
+          <div className="mt-10 flex items-center justify-center gap-6 text-xp text-[18px]">
+            <Trophy size={18} />
+            {t('achievement.prompts', { n: current.prompts.toLocaleString() })}
+          </div>
+        ) : null}
         {phase === 'done' && (
           <button type="button" className="pointer-events-auto mt-14 block mx-auto px-16 py-6 bg-accent text-white text-[16px] hover:bg-accent-bright" onClick={() => setCurrent(null)}>
             {t('evolution.close')}
