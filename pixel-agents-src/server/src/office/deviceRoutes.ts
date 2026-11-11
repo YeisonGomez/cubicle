@@ -7,7 +7,8 @@
  * dos rutas, pide una clave propia (cabecera `X-Cubicle-Key`) y está apagado
  * hasta que `oficina/dispositivo.json` tenga `"enabled": true`.
  *
- *   GET  /device/agents          → { agents: [{ id, name, room, color, status, pokemon? }] }
+ *   GET  /device/agents          → { agents: [{ id, name, room, color, status, pokemon?, sprite? }] }
+ *   GET  /device/sprite/:n       → sprite animado del Pokémon n, listo para dibujar (deviceSprites.ts)
  *   POST /device/open  {"id": n} → la webview abre ese agente y el navegador pasa al frente
  */
 import { execFile } from 'child_process';
@@ -18,6 +19,7 @@ import * as path from 'path';
 
 import type { AgentStateStore } from '../agentStateStore.js';
 import { officeDir } from '../officePaths.js';
+import { spriteFor } from './deviceSprites.js';
 import { resolveSkin } from './skinRoutes.js';
 
 export const DEVICE_PORT_DEFAULT = 3101;
@@ -40,6 +42,8 @@ export interface DeviceAgent {
   color: string;
   status: DeviceStatus;
   pokemon?: string;
+  /** Id del Pokémon: la placa pide su sprite a /device/sprite/:id. */
+  sprite?: number;
 }
 
 const configFile = (): string => path.join(officeDir(), 'dispositivo.json');
@@ -118,7 +122,7 @@ function rooms(): Map<string, string> {
 /** Agentes con nombre (uno por Directorio: el de id más bajo), ordenados por sala y nombre. */
 export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTracker, areaOf: (name: string) => string | undefined): DeviceAgent[] {
   const colors = rooms();
-  let pokemon: Record<string, { name: string }> = {};
+  let pokemon: Record<string, { name: string; id: number }> = {};
   try {
     const skin = resolveSkin();
     if (skin.theme === 'pokemon') pokemon = skin.agents;
@@ -130,7 +134,7 @@ export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTr
     const name = a.directoryName;
     if (!name || (byName.get(name)?.id ?? Infinity) < a.id) continue;
     const room = areaOf(name) ?? '';
-    byName.set(name, { id: a.id, name, room, color: colors.get(room) ?? ROOM_COLOR_FALLBACK, status: tracker.get(a.id), ...(pokemon[name] ? { pokemon: pokemon[name].name } : {}) });
+    byName.set(name, { id: a.id, name, room, color: colors.get(room) ?? ROOM_COLOR_FALLBACK, status: tracker.get(a.id), ...(pokemon[name] ? { pokemon: pokemon[name].name, sprite: pokemon[name].id } : {}) });
   }
   return [...byName.values()].sort((x, y) => x.room.localeCompare(y.room) || x.name.localeCompare(y.name));
 }
@@ -192,6 +196,15 @@ export function startDeviceServer(store: AgentStateStore, officePort: number, ar
       if (!keyMatches(req.headers['x-cubicle-key'], cfg.key)) return send(res, 401, { error: 'unauthorized' });
       if (req.method === 'GET' && req.url === '/device/agents') {
         return send(res, 200, { agents: listDeviceAgents(store, tracker, areaOf) });
+      }
+      const sprite = req.method === 'GET' ? /^\/device\/sprite\/(\d+)$/.exec(req.url ?? '') : null;
+      if (sprite) {
+        const id = Number(sprite[1]);
+        const url = Object.values(resolveSkin().agents).find((a) => a.id === id)?.sprite;
+        const data = url ? await spriteFor(url) : null;
+        if (!data) return send(res, 404, { error: 'sprite not found' });
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': data.length, 'Cache-Control': 'max-age=86400' });
+        return res.end(data);
       }
       if (req.method === 'POST' && req.url === '/device/open') {
         let id: unknown;

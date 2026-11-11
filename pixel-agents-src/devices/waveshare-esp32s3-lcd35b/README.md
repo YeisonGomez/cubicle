@@ -1,11 +1,12 @@
 # Cubicle Screen — Waveshare ESP32-S3-Touch-LCD-3.5B
 
-Tus agentes de Cubicle en una pantalla táctil por Wi-Fi: nombre, color de su sala, Pokémon y estado (Trabajando, Te necesita, Libre). Al tocar uno, Cubicle lo abre en el computador (panel del agente, su terminal y el navegador al frente en macOS).
+Tus agentes de Cubicle en una pantalla táctil por Wi-Fi, en una cuadrícula de 4x2 por diapositiva: el Pokémon animado, el nombre, el color de su sala y el estado (Trabajando, Te necesita, Libre). Al tocar uno, Cubicle lo abre en el computador (panel del agente, su terminal y el navegador al frente en macOS).
 
 ## Cómo funciona
 
 - Cubicle abre un servidor HTTP **aparte** en la red local (puerto 3101), solo con dos rutas y una clave propia (`X-Cubicle-Key`). El servidor de la oficina, que lleva la terminal, sigue escuchando solo en `127.0.0.1`. Está apagado hasta que `~/.pixel-agents/oficina/dispositivo.json` tenga `"enabled": true` (lo crea `flash.sh`).
   - `GET /device/agents` → `{ agents: [{ id, name, room, color, status: working|permission|idle, pokemon? }] }`
+  - `GET /device/sprite/:id` → el GIF del Pokémon ya compuesto en RGB565 (solo en memoria).
   - `POST /device/open {"id": n}` → la oficina abre ese agente.
 - La pantalla consulta cada 2 s y solo redibuja si algo cambió.
 
@@ -16,7 +17,7 @@ Tus agentes de Cubicle en una pantalla táctil por Wi-Fi: nombre, color de su sa
    arduino-cli config init
    arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
    arduino-cli core update-index && arduino-cli core install esp32:esp32@3.2.0
-   arduino-cli lib install "GFX Library for Arduino@1.6.0" "TCA9554@0.1.2" "WiFiManager" "ArduinoJson"
+   arduino-cli lib install "GFX Library for Arduino@1.6.0" "TCA9554@0.1.2" "WiFiManager" "ArduinoJson" "U8g2"
    ```
 2. Conecta la pantalla con un cable USB **de datos** (si el Mac no la ve, prueba otro puerto o cable: muchos solo cargan).
 3. `./flash.sh` — compila, carga, activa la pantalla en Cubicle y le guarda servidor (`<tu-mac>.local`), puerto y clave por USB.
@@ -28,7 +29,7 @@ Después basta el cable de carga: la pantalla funciona sola por Wi-Fi.
 ## Uso
 
 - Tocar una ficha → se abre el agente en el computador.
-- Tocar la cabecera → página siguiente (si hay más de 14 agentes).
+- Deslizar a los lados → diapositiva siguiente o anterior (8 agentes por diapositiva).
 - BOOT 3 s → olvida el Wi-Fi y vuelve a abrir el portal.
 - `./flash.sh config` → solo vuelve a guardar servidor y clave (p. ej. si cambias de clave).
 - Por el puerto serie: `INFO` (estado), `WIFI_RESET`, `CFG {"host":"…","port":3101,"key":"…"}`.
