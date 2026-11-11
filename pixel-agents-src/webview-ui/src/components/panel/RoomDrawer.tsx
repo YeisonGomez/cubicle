@@ -184,8 +184,9 @@ export function RoomDrawer({ target, color, onClose, onRenamed, onRenaming }: Ro
 
   return (
     <div className="ide-ui relative h-full shrink-0 flex flex-col bg-bg border-r-2 border-border text-text" style={{ width }}>
-      {/* Borde derecho arrastrable para cambiar el ancho */}
-      <div className="absolute top-0 right-0 h-full w-6 -mr-3 cursor-col-resize z-20 hover:bg-accent/40" onMouseDown={onResizeStart} title={t('panel.resize')} />
+      {/* Borde derecho arrastrable para cambiar el ancho: queda FUERA del panel
+          (sobre la oficina) para no tapar la barra de scroll del contenido. */}
+      <div className="absolute top-0 left-full h-full w-8 cursor-col-resize z-20 hover:bg-accent/40 touch-none" onPointerDown={onResizeStart} title={t('panel.resize')} />
 
       <div className="flex items-center gap-8 px-12 py-8 border-b-2" style={{ borderBottomColor: color ?? 'var(--color-border)' }}>
         <div className="min-w-0 flex-1">

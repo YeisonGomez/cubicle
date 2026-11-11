@@ -1,5 +1,5 @@
 import { PanelRightClose } from 'lucide-react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 
 import { TERMINAL_DRAWER_RESIZE_HANDLE_PX } from '../constants.js';
 import { useT } from '../i18n/index.js';
@@ -24,7 +24,7 @@ interface TerminalDrawerProps {
   /** Open width in px (user-resizable). Ignored while collapsed. */
   widthPx: number;
   /** Mousedown on the left-edge drag handle; App owns the resize gesture. */
-  onResizeStart: (e: ReactMouseEvent) => void;
+  onResizeStart: (e: ReactPointerEvent<HTMLElement>) => void;
   /** Look up an agent's character appearance for its tab mug shot. */
   getAppearance: (agentId: number) => AgentAppearance;
   /** An agent's tab status dot (null until first activity). */
@@ -100,7 +100,7 @@ export function TerminalDrawer({
         <div
           className="absolute top-0 left-0 bottom-0 z-40 cursor-col-resize hover:bg-accent"
           style={{ width: TERMINAL_DRAWER_RESIZE_HANDLE_PX }}
-          onMouseDown={onResizeStart}
+          onPointerDown={onResizeStart}
           title={t('terminal.resize')}
         />
 

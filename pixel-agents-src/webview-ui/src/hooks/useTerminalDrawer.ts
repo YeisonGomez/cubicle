@@ -1,5 +1,6 @@
-import type { MouseEvent as ReactMouseEvent } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { startDrag } from '../components/panel/dragGesture.js';
 
 const TERMINAL_WIDTH_KEY = 'pixel-agents.terminalWidth';
 
@@ -48,7 +49,7 @@ export interface TerminalDrawerController {
    *  and the office stay in sync. */
   select: (agentId: number) => void;
   close: () => void;
-  onResizeStart: (e: ReactMouseEvent) => void;
+  onResizeStart: (e: ReactPointerEvent<HTMLElement>) => void;
   getAppearance: (agentId: number) => AgentAppearance;
   /** Card status dot: 'disconnected' (red) for a terminal whose socket
    *  dropped, otherwise the agent's activity; null before its first activity. */
@@ -154,32 +155,22 @@ export function useTerminalDrawer({
   // so it reflows to fill whatever width is left — the canvas ResizeObserver
   // repaints and re-centres the camera on the smaller region automatically.
   const onResizeStart = useCallback(
-    (e: ReactMouseEvent) => {
-      e.preventDefault();
-      const startX = e.clientX;
+    (e: ReactPointerEvent<HTMLElement>) => {
       const startWidth = widthPx;
-      const onMove = (ev: MouseEvent) => {
-        // Dragging left (smaller clientX) widens the panel.
-        const next = startWidth + (startX - ev.clientX);
-        setPreferredWidthPx(clampDrawerWidth(next, window.innerWidth));
-      };
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-        document.body.style.userSelect = '';
-        setPreferredWidthPx((w) => {
-          try {
-            localStorage.setItem(TERMINAL_WIDTH_KEY, String(w));
-          } catch {
-            /* sin almacenamiento */
-          }
-          return w;
-        });
-      };
-      // Suppress text selection while dragging over the terminal/office.
-      document.body.style.userSelect = 'none';
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
+      startDrag(
+        e,
+        // Dragging left (negative dx) widens the panel.
+        (dx) => setPreferredWidthPx(clampDrawerWidth(startWidth - dx, window.innerWidth)),
+        () =>
+          setPreferredWidthPx((w) => {
+            try {
+              localStorage.setItem(TERMINAL_WIDTH_KEY, String(w));
+            } catch {
+              /* sin almacenamiento */
+            }
+            return w;
+          }),
+      );
     },
     [widthPx],
   );
