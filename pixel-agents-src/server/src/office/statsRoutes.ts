@@ -6,16 +6,16 @@
 import type { FastifyInstance } from 'fastify';
 import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
 
 import { persistedActivityStats, tokenUsageByDir, totalTokens, windowedHours } from '../activityStats.js';
 import { transcriptLastActivity } from '../agentProjects.js';
 import { capabilitiesFor } from '../capabilities.js';
-import { fableLeft, fableLimitState, usageByModel } from '../modelUsage.js';
 import { clearCapabilities } from '../capabilitiesPrompt.js';
 import { readConfig } from '../configPersistence.js';
 import type { HttpServerOptions } from '../httpServer.js';
+import { fableLeft, fableLimitState, usageByModel } from '../modelUsage.js';
 import { activityFile, capabilitiesFile, officeDir, usageFile } from '../officePaths.js';
-import * as path from 'path';
 import { relaunchAll } from '../terminal/relaunch.js';
 import { bearerAuth, launchDeps } from './shared.js';
 
@@ -180,11 +180,18 @@ export function registerStatsRoutes(app: FastifyInstance, options: HttpServerOpt
 
   // Límites de uso de la cuenta (sesión de 5 h y semana), escritos por la statusline.
   app.get('/api/usage', async () => {
-    try {
-      const u = JSON.parse(fs.readFileSync(usageFile(), 'utf8')) as Record<string, unknown> & { seven_day?: { resets_at?: number } | null };
-      return { ...u, plan: claudePlan(), fable: fableLeft({ ...fableLimitState(), resetsAt: u.seven_day?.resets_at, cached: cachedFableLimit() }, Date.now()) };
-    } catch {
-      return null;
-    }
+    const u = accountUsage();
+    return u ? { ...u.raw, plan: claudePlan(), fable: u.fable } : null;
   });
+}
+
+/** Uso de la cuenta (usage.json de la statusline) y lo que queda de Fable; null sin datos. */
+export function accountUsage(): { raw: Record<string, unknown>; weekUsed: number | null; fable: ReturnType<typeof fableLeft> } | null {
+  try {
+    const u = JSON.parse(fs.readFileSync(usageFile(), 'utf8')) as Record<string, unknown> & { seven_day?: { resets_at?: number; used_percentage?: number } | null };
+    const fable = fableLeft({ ...fableLimitState(), resetsAt: u.seven_day?.resets_at, cached: cachedFableLimit() }, Date.now());
+    return { raw: u, weekUsed: typeof u.seven_day?.used_percentage === 'number' ? u.seven_day.used_percentage : null, fable };
+  } catch {
+    return null;
+  }
 }

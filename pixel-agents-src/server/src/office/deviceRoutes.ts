@@ -9,6 +9,7 @@
  *
  *   GET  /device/agents          → { agents: [{ id, name, room, color, status, pokemon?, sprite? }] }
  *   GET  /device/sprite/:n       → sprite animado del Pokémon n, listo para dibujar (deviceSprites.ts)
+ *   GET  /device/summary      → hora, idioma, prompts de hoy y consumo de la semana y de Fable (reposo)
  *   POST /device/open  {"id": n} → la webview abre ese agente y el navegador pasa al frente
  *
  * "Te necesita" (terminó o pregunta y aún no lo has mirado) lo decide la webview: lo
@@ -27,8 +28,10 @@ import { readConfig } from '../configPersistence.js';
 import type { HttpServerOptions } from '../httpServer.js';
 import { activityFile, officeDir } from '../officePaths.js';
 import { spriteFor } from './deviceSprites.js';
+import { getOfficeLang } from './language.js';
 import { bearerAuth } from './shared.js';
 import { resolveSkin } from './skinRoutes.js';
+import { accountUsage } from './statsRoutes.js';
 
 export const DEVICE_PORT_DEFAULT = 3101;
 /** Color de una sala sin color propio (gris neutro). */
@@ -54,6 +57,8 @@ export interface DeviceAgent {
   sprite?: number;
   /** Seleccionado en la oficina. */
   selected?: boolean;
+  /** Desde cuándo está en ese estado (segundos epoch): la pantalla muestra cuánto lleva esperando. */
+  since: number;
 }
 
 /** Agentes que la oficina muestra como "Te necesita" (pendientes de mirar). */
@@ -115,26 +120,40 @@ export function keyMatches(given: string | string[] | undefined, expected: strin
  */
 export class DeviceStatusTracker {
   private readonly statuses = new Map<number, DeviceStatus>();
+  private readonly sinceMs = new Map<number, number>();
+  private readonly startedAt = Date.now();
+
+  private set(id: number, status: DeviceStatus): void {
+    if (this.statuses.get(id) === status) return;
+    this.statuses.set(id, status);
+    this.sinceMs.set(id, Date.now());
+  }
+
+  /** Segundos epoch desde que el agente está en su estado actual. */
+  since(id: number): number {
+    return Math.floor((this.sinceMs.get(id) ?? this.startedAt) / 1000);
+  }
 
   onMessage(m: Record<string, unknown>): void {
     const id = m.id;
     if (typeof id !== 'number') return;
     switch (m.type) {
       case 'agentStatus':
-        if (m.status === 'active') this.statuses.set(id, 'working');
-        else if (m.status === 'waiting') this.statuses.set(id, 'idle');
+        if (m.status === 'active') this.set(id, 'working');
+        else if (m.status === 'waiting') this.set(id, 'idle');
         break;
       case 'agentToolStart':
-        if (m.runInBackground !== true) this.statuses.set(id, m.permissionActive === true ? 'permission' : 'working');
+        if (m.runInBackground !== true) this.set(id, m.permissionActive === true ? 'permission' : 'working');
         break;
       case 'agentToolPermission':
-        this.statuses.set(id, 'permission');
+        this.set(id, 'permission');
         break;
       case 'agentToolPermissionClear':
-        if (this.statuses.get(id) === 'permission') this.statuses.set(id, 'working');
+        if (this.statuses.get(id) === 'permission') this.set(id, 'working');
         break;
       case 'agentClosed':
         this.statuses.delete(id);
+        this.sinceMs.delete(id);
         break;
     }
   }
@@ -153,19 +172,41 @@ function rooms(): Map<string, string> {
   }
 }
 
+const localDay = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** Resumen para la pantalla en reposo. Porcentajes CONSUMIDOS; null = sin dato. */
+export function deviceSummary(): { epoch: number; tz: number; date: string; lang: string; promptsToday: number; week: number | null; fable: number | null } {
+  const now = new Date();
+  const lang = getOfficeLang();
+  usageByAgent();
+  const u = accountUsage();
+  const fableLeftPct = u?.fable.remaining;
+  return {
+    epoch: Math.floor(now.getTime() / 1000),
+    tz: -now.getTimezoneOffset() * 60,
+    date: now.toLocaleDateString(lang === 'es' ? 'es' : 'en', { weekday: 'long', day: 'numeric', month: 'long' }),
+    lang,
+    promptsToday: usageCache?.today ?? 0,
+    week: u?.weekUsed ?? null,
+    fable: typeof fableLeftPct === 'number' ? 100 - fableLeftPct : null,
+  };
+}
+
 /** Uso de cada agente: prompts de los últimos 30 días y en total. */
 export interface Usage {
   recent: number;
   total: number;
 }
-const USAGE_TTL_MS = 5 * 60_000;
+const USAGE_TTL_MS = 60_000;
 const RECENT_DAYS = 30;
-let usageCache: { at: number; usage: Map<string, Usage> } | null = null;
+let usageCache: { at: number; usage: Map<string, Usage>; today: number } | null = null;
 
 function usageByAgent(): Map<string, Usage> {
   if (usageCache && Date.now() - usageCache.at < USAGE_TTL_MS) return usageCache.usage;
   const usage = new Map<string, Usage>();
+  let today = 0;
   try {
+    const todayKey = localDay(new Date());
     const since = new Date(Date.now() - RECENT_DAYS * 86_400_000).toISOString().slice(0, 10);
     const days = promptDaysByAgent(readConfig().directories, activityFile());
     for (const [name, byDay] of Object.entries(days)) {
@@ -174,13 +215,14 @@ function usageByAgent(): Map<string, Usage> {
       for (const [day, n] of Object.entries(byDay)) {
         total += n;
         if (day >= since) recent += n;
+        if (day === todayKey) today += n;
       }
       usage.set(name, { recent, total });
     }
   } catch {
     /* sin actividad: todos a cero */
   }
-  usageCache = { at: Date.now(), usage };
+  usageCache = { at: Date.now(), usage, today };
   return usage;
 }
 
@@ -221,7 +263,7 @@ export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTr
     const name = a.directoryName;
     if (!name || (byName.get(name)?.id ?? Infinity) < a.id) continue;
     const room = areaOf(name) ?? '';
-    byName.set(name, { id: a.id, name, room, color: colors.get(room) ?? ROOM_COLOR_FALLBACK, status: effectiveStatus(tracker.get(a.id), a.id), ...(pokemon[name] ? { pokemon: pokemon[name].name, sprite: pokemon[name].id } : {}), ...(a.id === selectedId ? { selected: true } : {}) });
+    byName.set(name, { id: a.id, name, room, color: colors.get(room) ?? ROOM_COLOR_FALLBACK, status: effectiveStatus(tracker.get(a.id), a.id), since: tracker.since(a.id), ...(pokemon[name] ? { pokemon: pokemon[name].name, sprite: pokemon[name].id } : {}), ...(a.id === selectedId ? { selected: true } : {}) });
   }
   return sortByUsage([...byName.values()], usageByAgent());
 }
@@ -293,6 +335,7 @@ export function startDeviceServer(store: AgentStateStore, officePort: number, ar
         res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': data.length, 'Cache-Control': 'max-age=86400' });
         return res.end(data);
       }
+      if (req.method === 'GET' && req.url === '/device/summary') return send(res, 200, deviceSummary());
       if (req.method === 'POST' && req.url === '/device/open') {
         let id: unknown;
         try {

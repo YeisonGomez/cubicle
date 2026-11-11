@@ -1,15 +1,21 @@
 /*
- * Cubicle Screen: tus agentes de Cubicle en una Waveshare ESP32-S3-Touch-LCD-3.5B.
+ * Cubicle Screen: un avisador de tus agentes de Cubicle en una Waveshare
+ * ESP32-S3-Touch-LCD-3.5B, por Wi-Fi.
  *
- * - Se conecta al Wi-Fi (la primera vez crea la red "Cubicle-Pantalla": conéctate
- *   desde el móvil y elige tu Wi-Fi; la contraseña se queda solo en la placa).
- * - Pide a Cubicle la lista de agentes cada 2 s (GET /device/agents) y los muestra en
- *   una cuadrícula de 4x2 por diapositiva: el Pokémon animado (GET /device/sprite/:id,
- *   ya en RGB565), el nombre, el color de su sala y su estado.
- * - Los agentes van agrupados por sala, de la más usada a la menos (orden del servidor).
- * - Las franjas de los lados (o deslizar) cambian de diapositiva; tocar un agente lo
- *   abre en el computador (POST /device/open).
- * - Mantener BOOT 3 s borra el Wi-Fi guardado y vuelve a abrir el portal.
+ * Vistas:
+ * - ACTIVOS (por defecto si hay alguno): solo los agentes que te necesitan (primero,
+ *   del que más lleva esperando al que menos) y los que están trabajando, en grande,
+ *   con su Pokémon animado y cuánto llevan en ese estado.
+ * - TODOS: cuadrícula 4x2 por diapositiva, agrupada por sala y ordenada por uso (orden
+ *   del servidor). Se alterna con ACTIVOS tocando la cabecera.
+ * - REPOSO: tras 5 min sin agentes activos ni toques: reloj, prompts de hoy y consumo
+ *   de la semana y de Fable, con la luz atenuada. Un toque vuelve a TODOS.
+ * - AVISO: cuando un agente termina o pide permiso, pantalla completa unos segundos con
+ *   su Pokémon y un borde que parpadea. Tocarlo abre el agente.
+ *
+ * Tocar un agente lo abre en el computador (POST /device/open). Las franjas de los lados
+ * (o deslizar) cambian de diapositiva. BOOT: toque corto gira la pantalla, 3 s borra el
+ * Wi-Fi. La primera vez crea la red "Cubicle-Pantalla" para elegir tu Wi-Fi.
  *
  * Servidor, puerto y clave se guardan por el puerto serie (ver README.md):
  *   CFG {"host":"mi-mac.local","ip":"192.168.1.10","port":3101,"key":"..."}
@@ -18,15 +24,15 @@
  * (0x3B). El reset de la pantalla va por el expansor TCA9554 (0x20, pin 1).
  */
 #include <Arduino.h>
-#include <ArduinoOTA.h>
-#include <WebServer.h>
 #include <ArduinoJson.h>
+#include <ArduinoOTA.h>
 #include <Arduino_GFX_Library.h>
 #include <ESPmDNS.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include <TCA9554.h>
 #include <U8g2lib.h>
+#include <WebServer.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <Wire.h>
@@ -58,23 +64,30 @@ static const uint16_t C_CARD = 0x18E4;
 static const uint16_t C_CARD_HI = 0x2967;
 static const uint16_t C_TEXT = 0xFFFF;
 static const uint16_t C_MUTED = 0x9CF3;
-static const uint16_t C_WORK = 0x4D1F;  // azul: trabajando
-static const uint16_t C_NEED = 0xFE60;  // amarillo: te necesita
-static const uint16_t C_IDLE = 0x7BEF;  // gris: libre
+static const uint16_t C_WORK = 0x4D1F;    // azul: trabajando
+static const uint16_t C_NEED = 0xFE60;    // amarillo: te necesita
+static const uint16_t C_IDLE = 0x7BEF;    // gris: libre
 static const uint16_t C_ERR = 0xF9A6;
-static const uint16_t C_SEL = 0x7B5E;     // morado: agente seleccionado en la oficina (#7c6cf0)
-static const uint16_t C_SEL_BG = 0x292C;  // su fondo (#2b2560)
+static const uint16_t C_SEL = 0x7B5E;     // morado: agente seleccionado en la oficina
+static const uint16_t C_SEL_BG = 0x292C;  // su fondo
+static const uint16_t C_XP = 0x3D9F;      // barras de consumo
 static const uint16_t SPRITE_KEY = 0xF81F;  // transparente en los sprites
 
 // Fuentes (U8g2, con tildes y eñes).
+#define F_CLOCK u8g2_font_logisoso62_tn
+#define F_BIG u8g2_font_helvB18_tf
 #define F_TITLE u8g2_font_helvB12_tf
 #define F_NAME u8g2_font_helvB10_tf
 #define F_SMALL u8g2_font_helvR08_tf
 
+// Textos en el idioma de la oficina (lo manda el servidor en /device/summary).
+bool langEn = true;
+#define T(es, en) (langEn ? (en) : (es))
+
 // ── Configuración guardada ────────────────────────────────────────
 Preferences prefs;
 WiFiManager wm;
-WebServer web(80);  // GET /info: estado y acelerómetro (diagnóstico, sin datos sensibles)
+WebServer web(80);  // diagnóstico: GET /info, /rotate y /shot
 bool netReady = false;
 bool pendingRedraw = false;  // pedido desde fuera del bucle (p. ej. /rotate)
 bool portalOpen = false;
@@ -93,8 +106,9 @@ struct Agent {
   String pokemon;
   int sprite;  // id del Pokémon, -1 si no hay
   uint16_t color;
-  bool selected;  // seleccionado en la oficina
-  char status;  // 'w' trabajando, 'p' pide permiso, 'q' te necesita (sin mirar), 'i' libre
+  bool selected;   // seleccionado en la oficina
+  uint32_t since;  // epoch (s) desde que está en su estado
+  char status;     // 'w' trabajando, 'p' pide permiso, 'q' te necesita (sin mirar), 'i' libre
 };
 static const int MAX_AGENTS = 48;
 Agent agents[MAX_AGENTS];
@@ -111,33 +125,72 @@ struct Sprite {
 static const int MAX_SPRITES = 48;
 Sprite sprites[MAX_SPRITES];
 
-int page = 0;
 String lastPayload;
 String errorText;
 String toastText;
 uint32_t toastUntil = 0;
-int pressedIndex = -1;
+int pressedIndex = -1;  // índice en agents[] de la ficha pulsada
 
-// Rejilla: 4 columnas x 2 filas por diapositiva.
+// ── Resumen (reposo) y reloj ──────────────────────────────────────
+uint32_t baseEpoch = 0;  // hora local (epoch + zona) en el momento baseMillis
+uint32_t baseMillis = 0;
+uint32_t serverEpoch = 0;  // epoch UTC del servidor, para "hace cuánto"
+String sumDate;
+int sumPrompts = 0;
+int sumWeek = -1;   // % consumido de la semana; -1 = sin dato
+int sumFable = -1;  // % consumido de Fable; -1 = sin dato
+bool haveSummary = false;
+
+uint32_t nowUtc() { return serverEpoch ? serverEpoch + (millis() - baseMillis) / 1000 : 0; }
+uint32_t nowLocal() { return baseEpoch ? baseEpoch + (millis() - baseMillis) / 1000 : 0; }
+
+// ── Vistas ────────────────────────────────────────────────────────
+enum Mode { MODE_FOCUS, MODE_GRID, MODE_REST };
+Mode mode = MODE_GRID;
+bool userAll = false;         // con agentes activos, el usuario pidió ver TODOS
+uint32_t lastActivityMs = 0;  // último toque o último momento con agentes activos
+static const uint32_t REST_AFTER_MS = 5UL * 60UL * 1000UL;
+static const int BL_FULL = 255;
+static const int BL_REST = 40;
+uint32_t previewRestUntil = 0;  // GET /preview?v=rest: enseña el reposo unos segundos (diagnóstico)
+
+// Lo que se muestra: índices de agents[] y sus diapositivas [first, last) sobre view[].
+int view[MAX_AGENTS];
+int viewCount = 0;
+int pageFirst[MAX_AGENTS], pageLast[MAX_AGENTS];
+int pageCount = 1;
+int page = 0;
+int vCols = 4, vRows = 2, vScale = 3;
+
 static const int HEADER_H = 30;
-static const int COLS = 4;
-static const int ROWS = 2;
-static const int PER_PAGE = COLS * ROWS;
 static const int GAP = 5;
 static const int SIDE_W = 40;    // franjas laterales para cambiar de diapositiva (el táctil es impreciso)
 static const int FOOTER_H = 14;  // puntos de diapositiva
-static const int SCALE = 3;  // sprites de 32 px → 96 px
 static const int SWIPE_PX = 50;
+
+// Animación al cambiar de diapositiva: la nueva entra deslizándose desde el lado.
+static const uint32_t SLIDE_MS = 220;
+uint32_t slideStart = 0;
+int slideDir = 0;  // 1 = viene de la derecha, -1 = de la izquierda
+int slideDx = 0;
+
+// Aviso a pantalla completa: un agente terminó ('f') o pide permiso ('p').
+static const uint32_t ALERT_MS = 5000;
+static const uint32_t ALERT_BLINK_MS = 2000;
+int alertAgentId = -1;
+char alertKind = 0;
+uint32_t alertStart = 0;
+int prevIds[MAX_AGENTS];
+char prevSt[MAX_AGENTS];
+int prevN = -1;  // -1 = aún sin primera carga (no se avisa de lo que ya estaba)
 
 // ── Orientación: 1 = horizontal normal, 3 = horizontal al revés ─────
 // A mano (toque corto en BOOT o GET /rotate) se guarda y es la que vale con la pantalla
 // tumbada; el acelerómetro (QMI8658 por I2C) solo la cambia si está claramente de pie.
 int rotation = 1;
-bool rotationManual = false;  // compat. con /info: true si la última la eligió el usuario
-uint8_t imuAddr = 0;          // 0 = sin sensor
-// Eje del acelerómetro que apunta a lo largo de la pantalla y signo con el que la
-// gravedad indica "al derecho" (rotación 1). Calibrado sobre la placa real.
-static const int IMU_AXIS = 1;  // 0 = x, 1 = y
+bool rotationManual = false;
+uint8_t imuAddr = 0;  // 0 = sin sensor
+static const int IMU_AXIS = 1;  // 0 = x, 1 = y (calibrado sobre la placa real)
 static const int IMU_SIGN_UPRIGHT = -1;
 static const int16_t IMU_THRESHOLD = 6000;  // ~0,37 g: por debajo, tumbada o dudosa → la guardada
 
@@ -149,62 +202,23 @@ uint16_t hexTo565(const char *hex) {
   return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
 }
 
-uint16_t statusColor(char st) { return st == 'w' ? C_WORK : (st == 'p' || st == 'q') ? C_NEED : C_IDLE; }
-const char *statusLabel(char st) { return st == 'w' ? "Trabajando" : st == 'p' ? "Pide permiso" : st == 'q' ? "Te necesita" : "Libre"; }
-// Diapositivas: los agentes de una sala (consecutivos, ya ordenados por uso) no se parten
-// entre diapositivas salvo que no quepan en una.
-static const int MAX_PAGES = MAX_AGENTS;
-int pageFirst[MAX_PAGES], pageLast[MAX_PAGES];  // [first, last)
-int pageCount = 1;
-void rebuildPages() {
-  pageCount = 0;
-  int i = 0;
-  pageFirst[0] = 0;
-  pageLast[0] = 0;
-  while (i < agentCount) {
-    int j = i;
-    while (j < agentCount && agents[j].room == agents[i].room) j++;
-    int size = j - i;
-    int used = pageCount ? pageLast[pageCount - 1] - pageFirst[pageCount - 1] : PER_PAGE;
-    if (used + size > PER_PAGE && !(used < PER_PAGE && size > PER_PAGE)) {
-      pageFirst[pageCount] = i;
-      pageLast[pageCount] = i;
-      pageCount++;
-    }
-    // Un grupo de más de PER_PAGE agentes se reparte en diapositivas llenas.
-    for (int k = i; k < j; k++) {
-      if (pageLast[pageCount - 1] - pageFirst[pageCount - 1] >= PER_PAGE) {
-        pageFirst[pageCount] = k;
-        pageLast[pageCount] = k;
-        pageCount++;
-      }
-      pageLast[pageCount - 1] = k + 1;
-    }
-    i = j;
-  }
-  if (pageCount == 0) pageCount = 1;
-}
-int pages() { return pageCount; }
-
-// Animación al cambiar de diapositiva: la nueva entra deslizándose desde el lado.
-static const uint32_t SLIDE_MS = 220;
-uint32_t slideStart = 0;
-int slideDir = 0;  // 1 = viene de la derecha, -1 = de la izquierda
-int slideDx = 0;   // desplazamiento actual de las fichas
-
-void goToPage(int p, int dir) {
-  if (p == page || p < 0 || p >= pages()) return;
-  page = p;
-  slideDir = dir;
-  slideStart = millis();
+bool isActive(char st) { return st == 'w' || st == 'p' || st == 'q'; }
+bool needsYou(char st) { return st == 'p' || st == 'q'; }
+uint16_t statusColor(char st) { return st == 'w' ? C_WORK : needsYou(st) ? C_NEED : C_IDLE; }
+const char *statusLabel(char st) {
+  return st == 'w' ? T("Trabajando", "Working") : st == 'p' ? T("Pide permiso", "Needs permission") : st == 'q' ? T("Te necesita", "Needs you") : T("Libre", "Idle");
 }
 
-/** Diapositiva del agente seleccionado en la oficina, o -1. */
-int selectedPage() {
-  for (int pg = 0; pg < pages(); pg++)
-    for (int i = pageFirst[pg]; i < pageLast[pg]; i++)
-      if (agents[i].selected) return pg;
-  return -1;
+/** "<1 min", "12 min", "1 h 05": cuánto lleva el agente en su estado ("" sin hora). */
+String elapsed(uint32_t since) {
+  uint32_t now = nowUtc();
+  if (!now || !since || now < since) return "";
+  uint32_t m = (now - since) / 60;
+  if (m < 1) return "<1 min";
+  if (m < 60) return String(m) + " min";
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%lu h %02lu", (unsigned long)(m / 60), (unsigned long)(m % 60));
+  return buf;
 }
 
 int textWidth(const String &s) {
@@ -214,7 +228,7 @@ int textWidth(const String &s) {
   return w;
 }
 
-/** Recorta con "…" para que quepa en maxW píxeles (respeta los caracteres UTF-8). */
+/** Recorta con "..." para que quepa en maxW píxeles (respeta los caracteres UTF-8). */
 String fitText(const String &s, int maxW) {
   if (textWidth(s) <= maxW) return s;
   String t = s;
@@ -233,6 +247,120 @@ void printCentered(const String &s, int cx, int baseline) {
   gfx->print(s);
 }
 
+int activeCount() {
+  int n = 0;
+  for (int i = 0; i < agentCount; i++)
+    if (isActive(agents[i].status)) n++;
+  return n;
+}
+
+Agent *agentById(int id) {
+  for (int i = 0; i < agentCount; i++)
+    if (agents[i].id == id) return &agents[i];
+  return nullptr;
+}
+
+// ── Vista y diapositivas ──────────────────────────────────────────
+int pages() { return pageCount; }
+int perPage() { return vCols * vRows; }
+
+void goToPage(int p, int dir) {
+  if (p == page || p < 0 || p >= pages()) return;
+  page = p;
+  slideDir = dir;
+  slideStart = millis();
+}
+
+/** Orden de ACTIVOS: primero quien te necesita, y dentro de cada grupo quien más lleva. */
+bool focusBefore(int a, int b) {
+  bool na = needsYou(agents[a].status), nb = needsYou(agents[b].status);
+  if (na != nb) return na;
+  return agents[a].since < agents[b].since;
+}
+
+/** Recalcula modo, lista visible y diapositivas. Devuelve si cambió el modo. */
+bool rebuildView() {
+  Mode before = mode;
+  int active = activeCount();
+  if (active > 0) {
+    lastActivityMs = millis();
+    mode = userAll ? MODE_GRID : MODE_FOCUS;
+  } else {
+    userAll = false;
+    mode = millis() - lastActivityMs > REST_AFTER_MS ? MODE_REST : MODE_GRID;
+  }
+  if (millis() < previewRestUntil) mode = MODE_REST;
+
+  viewCount = 0;
+  pageCount = 0;
+  if (mode == MODE_FOCUS) {
+    for (int i = 0; i < agentCount; i++)
+      if (isActive(agents[i].status)) {
+        int j = viewCount++;
+        while (j > 0 && focusBefore(i, view[j - 1])) {
+          view[j] = view[j - 1];
+          j--;
+        }
+        view[j] = i;
+      }
+    // Pocos: fichas grandes en una fila (1-2 → Pokémon a 5x; 3 → a 4x). Más: 3x2 por diapositiva.
+    vCols = viewCount <= 2 ? 2 : 3;
+    vRows = viewCount <= 3 ? 1 : 2;
+    vScale = vRows == 2 ? 3 : viewCount <= 2 ? 5 : 4;
+    for (int i = 0; i < viewCount; i += perPage()) {
+      pageFirst[pageCount] = i;
+      pageLast[pageCount] = min(viewCount, i + perPage());
+      pageCount++;
+    }
+  } else {
+    for (int i = 0; i < agentCount; i++) view[viewCount++] = i;
+    vCols = 4;
+    vRows = 2;
+    vScale = 3;
+    // Los agentes de una sala (consecutivos) no se parten entre diapositivas si caben en una.
+    int i = 0;
+    while (i < viewCount) {
+      int j = i;
+      while (j < viewCount && agents[j].room == agents[i].room) j++;
+      int used = pageCount ? pageLast[pageCount - 1] - pageFirst[pageCount - 1] : perPage();
+      if (used + (j - i) > perPage() && !(used < perPage() && (j - i) > perPage())) {
+        pageFirst[pageCount] = i;
+        pageLast[pageCount] = i;
+        pageCount++;
+      }
+      for (int k = i; k < j; k++) {
+        if (pageLast[pageCount - 1] - pageFirst[pageCount - 1] >= perPage()) {
+          pageFirst[pageCount] = k;
+          pageLast[pageCount] = k;
+          pageCount++;
+        }
+        pageLast[pageCount - 1] = k + 1;
+      }
+      i = j;
+    }
+  }
+  if (pageCount == 0) {
+    pageFirst[0] = pageLast[0] = 0;
+    pageCount = 1;
+  }
+  if (mode != before) {
+    page = 0;
+    slideDir = 0;
+    slideDx = 0;
+    analogWrite(PIN_BL, mode == MODE_REST ? BL_REST : BL_FULL);
+  }
+  if (page >= pageCount) page = pageCount - 1;
+  return mode != before;
+}
+
+/** Diapositiva del agente seleccionado en la oficina dentro de la vista, o -1. */
+int selectedPage() {
+  for (int pg = 0; pg < pages(); pg++)
+    for (int i = pageFirst[pg]; i < pageLast[pg]; i++)
+      if (agents[view[i]].selected) return pg;
+  return -1;
+}
+
 // ── Táctil (AXS15231B por I2C, sondeado) ──────────────────────────
 bool readTouch(int &x, int &y) {
   static const uint8_t cmd[11] = {0xb5, 0xab, 0xa5, 0x5a, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x00};
@@ -246,7 +374,7 @@ bool readTouch(int &x, int &y) {
   int rx = ((d[2] & 0x0F) << 8) | d[3];
   int ry = ((d[4] & 0x0F) << 8) | d[5];
   if (rx >= 320 || ry >= 480) return false;
-  // Panel vertical (320x480) girado a horizontal (rotación 1 del lienzo).
+  // Panel vertical (320x480) girado a horizontal.
   if (rotation == 1) {
     x = ry;
     y = 319 - rx;
@@ -342,13 +470,39 @@ bool resolveHost() {
 
 String baseUrl() { return "http://" + hostIp.toString() + ":" + String(cfgPort); }
 
+/** Avisa si un agente acaba de terminar o de pedir permiso (comparando con la carga anterior). */
+void detectAlerts() {
+  if (prevN >= 0) {
+    for (int i = 0; i < agentCount; i++) {
+      char was = 0;
+      for (int j = 0; j < prevN; j++)
+        if (prevIds[j] == agents[i].id) was = prevSt[j];
+      char now = agents[i].status;
+      char kind = 0;
+      if (now == 'p' && was != 'p') kind = 'p';
+      else if (was == 'w' && (now == 'i' || now == 'q')) kind = 'f';
+      if (kind) {
+        alertAgentId = agents[i].id;
+        alertKind = kind;
+        alertStart = millis();
+        lastActivityMs = millis();
+      }
+    }
+  }
+  prevN = agentCount;
+  for (int i = 0; i < agentCount; i++) {
+    prevIds[i] = agents[i].id;
+    prevSt[i] = agents[i].status;
+  }
+}
+
 bool fetchAgents() {
   if (WiFi.status() != WL_CONNECTED) {
-    errorText = "Sin Wi-Fi";
+    errorText = T("Sin Wi-Fi", "No Wi-Fi");
     return false;
   }
   if (!resolveHost()) {
-    errorText = "No encuentro " + cfgHost;
+    errorText = String(T("No encuentro ", "Can't find ")) + cfgHost;
     return false;
   }
   HTTPClient http;
@@ -358,7 +512,7 @@ bool fetchAgents() {
   http.addHeader("X-Cubicle-Key", cfgKey);
   int code = http.GET();
   if (code != 200) {
-    errorText = code == 401 ? "Clave incorrecta" : code < 0 ? "Cubicle no responde" : "Error " + String(code);
+    errorText = code == 401 ? T("Clave incorrecta", "Wrong key") : code < 0 ? T("Cubicle no responde", "Cubicle is not responding") : "Error " + String(code);
     http.end();
     // Tras varios fallos seguidos se vuelve a buscar el Mac (su IP puede haber cambiado).
     static int fails = 0;
@@ -376,7 +530,7 @@ bool fetchAgents() {
 
   JsonDocument doc;
   if (deserializeJson(doc, body)) {
-    errorText = "Respuesta no válida";
+    errorText = T("Respuesta no válida", "Invalid response");
     return true;
   }
   agentCount = 0;
@@ -390,11 +544,40 @@ bool fetchAgents() {
     g.sprite = a["sprite"] | -1;
     g.color = hexTo565(a["color"] | "#888888");
     g.selected = a["selected"] | false;
+    g.since = a["since"] | 0;
     const char *st = a["status"] | "idle";
     g.status = strcmp(st, "working") == 0 ? 'w' : strcmp(st, "permission") == 0 ? 'p' : strcmp(st, "question") == 0 ? 'q' : 'i';
   }
-  rebuildPages();
-  if (page >= pages()) page = pages() - 1;
+  detectAlerts();
+  return true;
+}
+
+/** Hora, idioma, prompts de hoy y consumo (para el reposo y los "hace cuánto"). */
+bool fetchSummary() {
+  if (WiFi.status() != WL_CONNECTED || !resolveHost()) return false;
+  HTTPClient http;
+  http.setConnectTimeout(2000);
+  http.setTimeout(3000);
+  http.begin(baseUrl() + "/device/summary");
+  http.addHeader("X-Cubicle-Key", cfgKey);
+  int code = http.GET();
+  if (code != 200) {
+    http.end();
+    return false;
+  }
+  String body = http.getString();
+  http.end();
+  JsonDocument doc;
+  if (deserializeJson(doc, body)) return false;
+  serverEpoch = doc["epoch"] | 0;
+  baseEpoch = serverEpoch + (long)(doc["tz"] | 0);
+  baseMillis = millis();
+  sumDate = (const char *)(doc["date"] | "");
+  langEn = strcmp(doc["lang"] | "en", "es") != 0;
+  sumPrompts = doc["promptsToday"] | 0;
+  sumWeek = doc["week"].is<float>() ? (int)round(doc["week"].as<float>()) : -1;
+  sumFable = doc["fable"].is<float>() ? (int)round(doc["fable"].as<float>()) : -1;
+  haveSummary = true;
   return true;
 }
 
@@ -406,12 +589,12 @@ Sprite *findSprite(int id) {
 
 /** Descarga un sprite que falte (uno por llamada, para no frenar el táctil). Devuelve si cargó alguno. */
 bool loadMissingSprite() {
-  // Primero los de la diapositiva visible.
-  int order[MAX_AGENTS];
+  // Primero los de la diapositiva visible; después, el resto.
+  int order[MAX_AGENTS * 2];
   int k = 0;
-  for (int i = pageFirst[page]; i < pageLast[page]; i++) order[k++] = i;
-  for (int i = 0; i < agentCount; i++)
-    if (i < pageFirst[page] || i >= pageLast[page]) order[k++] = i;
+  if (mode != MODE_REST)
+    for (int i = pageFirst[page]; i < pageLast[page]; i++) order[k++] = view[i];
+  for (int i = 0; i < agentCount; i++) order[k++] = i;
   for (int j = 0; j < k; j++) {
     int id = agents[order[j]].sprite;
     if (id < 0 || findSprite(id)) continue;
@@ -485,33 +668,50 @@ void openAgent(const Agent &a) {
   http.end();
   // Sin aviso al abrir (el agente se abre en el computador); solo si falla.
   if (code != 200) {
-    toastText = "No se pudo abrir (" + String(code) + ")";
+    toastText = String(T("No se pudo abrir (", "Could not open (")) + String(code) + ")";
     toastUntil = millis() + 2000;
   }
 }
 
 // ── Dibujo ────────────────────────────────────────────────────────
+/** Rectángulo de la ficha `slot` de la diapositiva actual (centrada si hay una sola fila sin llenar). */
 void cellRect(int slot, int &x, int &y, int &w, int &h) {
-  int col = slot % COLS, row = slot / COLS;
-  w = (W - 2 * SIDE_W - GAP * (COLS + 1)) / COLS;
-  h = (H - HEADER_H - FOOTER_H - GAP * (ROWS + 1)) / ROWS;
-  x = SIDE_W + GAP + col * (w + GAP) + slideDx;
+  int col = slot % vCols, row = slot / vCols;
+  w = (W - 2 * SIDE_W - GAP * (vCols + 1)) / vCols;
+  h = (H - HEADER_H - FOOTER_H - GAP * (vRows + 1)) / vRows;
+  int onPage = pageLast[page] - pageFirst[page];
+  int offset = vRows == 1 && onPage < vCols ? (vCols - onPage) * (w + GAP) / 2 : 0;
+  x = SIDE_W + GAP + col * (w + GAP) + offset + slideDx;
   y = HEADER_H + GAP + row * (h + GAP);
 }
 
-void drawSprite(const Sprite &s, int cx, int bottom) {
+void drawSprite(const Sprite &s, int cx, int bottom, int scale) {
   if (!s.px || !s.n) return;
   uint32_t t = s.total ? millis() % s.total : 0;
   int f = 0;
   while (f < s.n - 1 && t >= s.delay[f]) t -= s.delay[f++];
   const uint16_t *p = s.px + (size_t)s.w * s.h * f;
-  int x0 = cx - s.w * SCALE / 2;
-  int y0 = bottom - s.h * SCALE;
+  int x0 = cx - s.w * scale / 2;
+  int y0 = bottom - s.h * scale;
   for (int y = 0; y < s.h; y++)
     for (int x = 0; x < s.w; x++) {
       uint16_t c = p[y * s.w + x];
-      if (c != SPRITE_KEY) gfx->fillRect(x0 + x * SCALE, y0 + y * SCALE, SCALE, SCALE, c);
+      if (c != SPRITE_KEY) gfx->fillRect(x0 + x * scale, y0 + y * scale, scale, scale, c);
     }
+}
+
+/** Pokémon del agente o, si no hay (o aún carga), su inicial en un círculo del color de la sala. */
+void drawAvatar(const Agent &a, int cx, int bottom, int scale) {
+  Sprite *s = a.sprite >= 0 ? findSprite(a.sprite) : nullptr;
+  if (s && s->px) {
+    drawSprite(*s, cx, bottom, scale);
+    return;
+  }
+  int r = 10 * scale;
+  gfx->fillCircle(cx, bottom - 14 * scale, r, a.color);
+  gfx->setFont(scale >= 4 ? F_BIG : F_TITLE);
+  gfx->setTextColor(C_BG);
+  printCentered(a.name.substring(0, 1), cx, bottom - 14 * scale + (scale >= 4 ? 9 : 6));
 }
 
 /** Flecha de línea tipo "<" o ">" (dir -1 o 1), de 3 px de grosor, centrada en (cx, cy). */
@@ -538,93 +738,219 @@ void drawMessage(const char *title, const String &line1, const String &line2 = "
   gfx->flush();
 }
 
-void draw() {
-  gfx->fillScreen(C_BG);
+/** Botón de la cabecera (derecha) para alternar ACTIVOS / TODOS. Devuelve su ancho. */
+int drawToggle() {
+  if (activeCount() == 0) return 0;
+  gfx->setFont(F_SMALL);
+  String label = mode == MODE_FOCUS ? T("Ver todos", "Show all") : T("Ver activos", "Show active");
+  int tw = textWidth(label);
+  int bw = tw + 20;
+  gfx->fillRoundRect(W - 8 - bw, 4, bw, 22, 11, C_CARD_HI);
+  gfx->setTextColor(C_TEXT);
+  gfx->setCursor(W - 8 - bw + 10, 19);
+  gfx->print(label);
+  return bw + 12;
+}
 
-  // Cabecera: las salas de esta diapositiva (con su color) y, a la derecha, el recuento.
-  int working = 0, needs = 0;
-  for (int i = 0; i < agentCount; i++) {
-    if (agents[i].status == 'w') working++;
-    if (agents[i].status == 'p' || agents[i].status == 'q') needs++;
-  }
+void drawHeader() {
   if (errorText.length()) {
     gfx->fillRect(0, 0, W, HEADER_H, C_ERR);
     gfx->setFont(F_NAME);
     gfx->setTextColor(C_TEXT);
     gfx->setCursor(10, 20);
     gfx->print(errorText);
-  } else {
-    gfx->setFont(F_SMALL);
-    String right = String(working) + " trabajando";
-    if (needs > 0) right += "  " + String(needs) + (needs > 1 ? " te necesitan" : " te necesita");
-    int rw = textWidth(right);
-    gfx->setTextColor(needs > 0 ? C_NEED : C_WORK);
-    gfx->setCursor(W - 10 - rw, 20);
-    gfx->print(right);
-    gfx->setFont(F_NAME);
-    int hx = 10;
-    for (int i = pageFirst[page]; i < pageLast[page]; i++) {
-      if (i > pageFirst[page] && agents[i].room == agents[i - 1].room) continue;
-      String r = agents[i].room;
-      int tw = textWidth(r);
-      if (hx + 14 + tw > W - 20 - rw) break;
-      gfx->fillCircle(hx + 4, 15, 4, agents[i].color);
-      gfx->setTextColor(C_TEXT);
+    return;
+  }
+  int rightW = drawToggle();
+  gfx->setFont(F_NAME);
+  int hx = 10;
+  if (mode == MODE_FOCUS) {
+    int working = 0, needs = 0;
+    for (int i = 0; i < agentCount; i++) {
+      if (agents[i].status == 'w') working++;
+      if (needsYou(agents[i].status)) needs++;
+    }
+    if (needs > 0) {
+      String s = String(needs) + " " + (needs > 1 ? T("te necesitan", "need you") : T("te necesita", "needs you"));
+      gfx->fillCircle(hx + 4, 15, 4, C_NEED);
+      gfx->setTextColor(C_NEED);
       gfx->setCursor(hx + 13, 20);
-      gfx->print(r);
-      hx += 13 + tw + 14;
+      gfx->print(s);
+      hx += 13 + textWidth(s) + 16;
     }
+    if (working > 0) {
+      String s = String(working) + " " + T("trabajando", "working");
+      gfx->fillCircle(hx + 4, 15, 4, C_WORK);
+      gfx->setTextColor(C_WORK);
+      gfx->setCursor(hx + 13, 20);
+      gfx->print(s);
+    }
+    return;
   }
-
-  // Cuadrícula de la diapositiva.
-  int start = pageFirst[page];
-  for (int slot = 0; slot < PER_PAGE && start + slot < pageLast[page]; slot++) {
-    const Agent &a = agents[start + slot];
-    int x, y, w, h;
-    cellRect(slot, x, y, w, h);
-    uint16_t sc = statusColor(a.status);
-    bool pressed = (start + slot) == pressedIndex;
-    gfx->fillRoundRect(x, y, w, h, 8, pressed ? C_CARD_HI : a.selected ? C_SEL_BG : C_CARD);
-    // Color de la sala: franja por DENTRO del borde de estado, sin taparlo.
-    gfx->fillRoundRect(x + 6, y + 4, w - 12, 4, 2, a.color);
-    // Borde: morado si es el seleccionado en la oficina; si no, el color del estado (libre sin borde).
-    if (a.selected || a.status != 'i') {
-      uint16_t bc = a.selected ? C_SEL : sc;
-      gfx->drawRoundRect(x, y, w, h, 8, bc);
-      gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 7, bc);
-    }
-    int cx = x + w / 2;
-    Sprite *s = a.sprite >= 0 ? findSprite(a.sprite) : nullptr;
-    if (s && s->px) {
-      drawSprite(*s, cx, y + 96);
-    } else {
-      // Sin Pokémon (o aún cargando): la inicial en un círculo del color de la sala.
-      gfx->fillCircle(cx, y + 54, 28, a.color);
-      gfx->setFont(F_TITLE);
-      gfx->setTextColor(C_BG);
-      printCentered(a.name.substring(0, 1), cx, y + 61);
-    }
-    gfx->setFont(F_NAME);
+  // TODOS: las salas de esta diapositiva, cada una con su color.
+  for (int i = pageFirst[page]; i < pageLast[page]; i++) {
+    const Agent &a = agents[view[i]];
+    if (i > pageFirst[page] && a.room == agents[view[i - 1]].room) continue;
+    int tw = textWidth(a.room);
+    if (hx + 14 + tw > W - 12 - rightW) break;
+    gfx->fillCircle(hx + 4, 15, 4, a.color);
     gfx->setTextColor(C_TEXT);
-    printCentered(fitText(a.name, w - 8), cx, y + h - 20);
-    gfx->setFont(F_SMALL);
-    gfx->setTextColor(sc);
-    String label = statusLabel(a.status);
-    int lw = textWidth(label) + 12;
-    gfx->fillCircle(cx - lw / 2 + 3, y + h - 10, 3, sc);
-    gfx->setCursor(cx - lw / 2 + 12, y + h - 6);
-    gfx->print(label);
+    gfx->setCursor(hx + 13, 20);
+    gfx->print(a.room);
+    hx += 13 + tw + 14;
   }
+}
+
+void drawCard(int slot, int idx) {
+  const Agent &a = agents[idx];
+  int x, y, w, h;
+  cellRect(slot, x, y, w, h);
+  uint16_t sc = statusColor(a.status);
+  bool pressed = idx == pressedIndex;
+  bool big = vRows == 1;
+  gfx->fillRoundRect(x, y, w, h, 8, pressed ? C_CARD_HI : a.selected ? C_SEL_BG : C_CARD);
+  // Color de la sala: franja por DENTRO del borde de estado, sin taparlo.
+  gfx->fillRoundRect(x + 6, y + 4, w - 12, 4, 2, a.color);
+  // Borde: morado si es el seleccionado en la oficina; si no, el color del estado (libre sin borde).
+  if (a.selected || a.status != 'i') {
+    uint16_t bc = a.selected ? C_SEL : sc;
+    gfx->drawRoundRect(x, y, w, h, 8, bc);
+    gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 7, bc);
+  }
+  int cx = x + w / 2;
+  String label = statusLabel(a.status);
+  String time = mode == MODE_FOCUS ? elapsed(a.since) : "";
+  if (big) {
+    int sb = y + 14 + 32 * vScale;  // base del Pokémon
+    drawAvatar(a, cx, sb, vScale);
+    gfx->setFont(vScale >= 5 ? F_BIG : F_TITLE);
+    gfx->setTextColor(C_TEXT);
+    printCentered(fitText(a.name, w - 10), cx, sb + 30);
+    gfx->setFont(F_NAME);
+    gfx->setTextColor(sc);
+    int lw = textWidth(label) + 12;
+    gfx->fillCircle(cx - lw / 2 + 3, sb + 47, 4, sc);
+    gfx->setCursor(cx - lw / 2 + 12, sb + 52);
+    gfx->print(label);
+    if (time.length()) {
+      gfx->setFont(F_TITLE);
+      gfx->setTextColor(C_MUTED);
+      printCentered(time, cx, sb + 76);
+    }
+    return;
+  }
+  drawAvatar(a, cx, y + 96, vScale);
+  gfx->setFont(F_NAME);
+  gfx->setTextColor(C_TEXT);
+  printCentered(fitText(a.name, w - 8), cx, y + h - 20);
+  gfx->setFont(F_SMALL);
+  gfx->setTextColor(sc);
+  if (time.length() && textWidth(label + " · " + time) + 12 <= w - 8) label += " · " + time;
+  int lw = textWidth(label) + 12;
+  gfx->fillCircle(cx - lw / 2 + 3, y + h - 10, 3, sc);
+  gfx->setCursor(cx - lw / 2 + 12, y + h - 6);
+  gfx->print(label);
+}
+
+/** Barra de consumo con su título y porcentaje. */
+void drawMeter(int x, int y, int w, const char *title, int pct) {
+  gfx->setFont(F_NAME);
+  gfx->setTextColor(C_MUTED);
+  gfx->setCursor(x, y);
+  gfx->print(title);
+  String v = pct < 0 ? T("Sin dato", "No data") : String(pct) + "%";
+  gfx->setTextColor(C_TEXT);
+  gfx->setCursor(x + w - textWidth(v), y);
+  gfx->print(v);
+  gfx->fillRoundRect(x, y + 8, w, 10, 5, C_CARD_HI);
+  if (pct > 0) gfx->fillRoundRect(x, y + 8, max(10, w * min(pct, 100) / 100), 10, 5, pct >= 90 ? C_ERR : pct >= 70 ? C_NEED : C_XP);
+}
+
+void drawRest() {
+  gfx->fillScreen(C_BG);
+  uint32_t t = nowLocal();
+  char clock[8] = "--:--";
+  if (t) snprintf(clock, sizeof(clock), "%02lu:%02lu", (unsigned long)((t % 86400) / 3600), (unsigned long)((t % 3600) / 60));
+  gfx->setFont(F_CLOCK);
+  gfx->setTextColor(C_TEXT);
+  printCentered(clock, W / 2, 112);
+  gfx->setFont(F_TITLE);
+  gfx->setTextColor(C_MUTED);
+  printCentered(sumDate, W / 2, 142);
+  if (errorText.length()) {
+    gfx->setFont(F_NAME);
+    gfx->setTextColor(C_ERR);
+    printCentered(errorText, W / 2, 200);
+    return;
+  }
+  // Tres columnas: prompts de hoy, semana y Fable.
+  int cw = 130, gap = 20, x0 = (W - 3 * cw - 2 * gap) / 2, y = 210;
+  gfx->setFont(F_NAME);
+  gfx->setTextColor(C_MUTED);
+  gfx->setCursor(x0, y);
+  gfx->print(T("Prompts hoy", "Prompts today"));
+  gfx->setFont(F_BIG);
+  gfx->setTextColor(C_TEXT);
+  gfx->setCursor(x0, y + 30);
+  gfx->print(sumPrompts);
+  drawMeter(x0 + cw + gap, y, cw, T("Semana", "Week"), sumWeek);
+  drawMeter(x0 + 2 * (cw + gap), y, cw, "Fable", sumFable);
+  gfx->setFont(F_SMALL);
+  gfx->setTextColor(C_MUTED);
+  printCentered(T("Nadie te necesita. Toca para ver tus agentes.", "Nobody needs you. Tap to see your agents."), W / 2, H - 16);
+}
+
+/** Aviso a pantalla completa: el agente que terminó o pide permiso. */
+void drawAlert(const Agent &a) {
+  uint16_t sc = alertKind == 'p' ? C_NEED : C_WORK;
+  gfx->fillScreen(C_BG);
+  uint32_t dt = millis() - alertStart;
+  if (dt > ALERT_BLINK_MS || (dt / 250) % 2 == 0)
+    for (int i = 0; i < 6; i++) gfx->drawRoundRect(i, i, W - 2 * i, H - 2 * i, 14 - i, sc);
+  drawAvatar(a, 130, 250, 6);
+  int tx = 250, tw = W - tx - 20;
+  gfx->setFont(F_TITLE);
+  gfx->setTextColor(sc);
+  gfx->setCursor(tx, 112);
+  gfx->print(alertKind == 'p' ? T("Pide permiso", "Needs permission") : T("Terminó", "Finished"));
+  gfx->setFont(F_BIG);
+  gfx->setTextColor(C_TEXT);
+  gfx->setCursor(tx, 148);
+  gfx->print(fitText(a.name, tw));
+  gfx->setFont(F_NAME);
+  gfx->fillCircle(tx + 5, 171, 5, a.color);
+  gfx->setTextColor(C_MUTED);
+  gfx->setCursor(tx + 16, 176);
+  gfx->print(fitText(a.room, tw - 16));
+  gfx->setFont(F_SMALL);
+  gfx->setCursor(tx, 226);
+  gfx->print(T("Toca para abrirlo", "Tap to open"));
+}
+
+void draw() {
+  Agent *alerted = alertAgentId >= 0 ? agentById(alertAgentId) : nullptr;
+  if (alerted) {
+    drawAlert(*alerted);
+    gfx->flush();
+    return;
+  }
+  if (mode == MODE_REST) {
+    drawRest();
+    gfx->flush();
+    return;
+  }
+  gfx->fillScreen(C_BG);
+  drawHeader();
+  for (int slot = 0; slot < perPage() && pageFirst[page] + slot < pageLast[page]; slot++) drawCard(slot, view[pageFirst[page] + slot]);
   if (agentCount == 0 && !errorText.length()) {
     gfx->setFont(F_NAME);
     gfx->setTextColor(C_MUTED);
-    printCentered("Sin agentes en la oficina", W / 2, H / 2);
+    printCentered(T("Sin agentes en la oficina", "No agents in the office"), W / 2, H / 2);
   }
 
-  // Flechas laterales y puntos de diapositiva.
+  // Flechas laterales y puntos de diapositiva (por encima de las fichas que entran deslizándose).
   if (pages() > 1) {
     int cy = HEADER_H + (H - HEADER_H - FOOTER_H) / 2;
-    // Por encima de las fichas que entran deslizándose.
     gfx->fillRect(0, HEADER_H, SIDE_W, H - HEADER_H, C_BG);
     gfx->fillRect(W - SIDE_W, HEADER_H, SIDE_W, H - HEADER_H, C_BG);
     gfx->fillRoundRect(4, HEADER_H + GAP, SIDE_W - 6, H - HEADER_H - FOOTER_H - 2 * GAP, 8, C_CARD);
@@ -649,10 +975,13 @@ void draw() {
   gfx->flush();
 }
 
-/** ¿Hay sprites animados en la diapositiva visible? */
-bool pageAnimates() {
+/** ¿Hay sprites animados a la vista? */
+bool screenAnimates() {
+  if (alertAgentId >= 0) return true;
+  if (mode == MODE_REST) return false;
   for (int i = pageFirst[page]; i < pageLast[page]; i++) {
-    Sprite *s = agents[i].sprite >= 0 ? findSprite(agents[i].sprite) : nullptr;
+    const Agent &a = agents[view[i]];
+    Sprite *s = a.sprite >= 0 ? findSprite(a.sprite) : nullptr;
     if (s && s->n > 1) return true;
   }
   return false;
@@ -702,20 +1031,23 @@ void handleSerial() {
   }
 }
 
-// ── Actualización por Wi-Fi y estado ──────────────────────────────
-/** OTA (contraseña = la clave de Cubicle; `./flash.sh ota`) y GET /info. */
+// ── Actualización por Wi-Fi y diagnóstico ─────────────────────────
+/** OTA (contraseña = la clave de Cubicle; `./flash.sh ota`), GET /info, /rotate y /shot. */
 void startNetServices() {
   netReady = true;
   ArduinoOTA.setHostname("cubicle-pantalla");
   ArduinoOTA.setPassword(cfgKey.c_str());
-  ArduinoOTA.onStart([]() { drawMessage("Actualizando", "No la desconectes..."); });
+  ArduinoOTA.onStart([]() {
+    analogWrite(PIN_BL, BL_FULL);
+    drawMessage(T("Actualizando", "Updating"), T("No la desconectes...", "Do not unplug..."));
+  });
   ArduinoOTA.begin();
   web.on("/info", []() {
     int16_t ax = 0, ay = 0, az = 0;
     bool imu = readAccel(ax, ay, az);
-    char out[200];
-    snprintf(out, sizeof(out), "{\"rotation\":%d,\"manual\":%s,\"imu\":%s,\"ax\":%d,\"ay\":%d,\"az\":%d,\"agents\":%d,\"error\":\"%s\"}",
-             rotation, rotationManual ? "true" : "false", imu ? "true" : "false", ax, ay, az, agentCount, errorText.c_str());
+    char out[260];
+    snprintf(out, sizeof(out), "{\"rotation\":%d,\"manual\":%s,\"imu\":%s,\"ax\":%d,\"ay\":%d,\"az\":%d,\"agents\":%d,\"mode\":%d,\"shown\":%d,\"pages\":%d,\"page\":%d,\"alert\":%d,\"error\":\"%s\"}",
+             rotation, rotationManual ? "true" : "false", imu ? "true" : "false", ax, ay, az, agentCount, (int)mode, viewCount, pageCount, page, alertAgentId, errorText.c_str());
     web.send(200, "application/json", out);
   });
   web.on("/rotate", []() {
@@ -723,6 +1055,40 @@ void startNetServices() {
     pendingRedraw = true;
     web.send(200, "application/json", String("{\"rotation\":") + rotation + "}");
   });
+  // Captura de lo que hay en pantalla (RGB565 crudo, 320x480 sin girar). Pide la clave.
+  web.on("/shot", []() {
+    if (web.header("X-Cubicle-Key") != cfgKey) {
+      web.send(401, "text/plain", "unauthorized");
+      return;
+    }
+    const size_t len = 320UL * 480UL * 2UL;
+    const uint8_t *fb = (const uint8_t *)gfx->getFramebuffer();
+    web.setContentLength(len);
+    web.send(200, "application/octet-stream", "");
+    for (size_t o = 0; o < len; o += 4096) web.sendContent((const char *)fb + o, min((size_t)4096, len - o));
+  });
+  // Vista previa para revisar la pantalla sin esperar: v=rest | alert | toggle. Pide la clave.
+  web.on("/preview", []() {
+    if (web.header("X-Cubicle-Key") != cfgKey) {
+      web.send(401, "text/plain", "unauthorized");
+      return;
+    }
+    String v = web.arg("v");
+    if (v == "rest") {
+      previewRestUntil = millis() + 8000;
+    } else if (v == "alert" && agentCount > 0) {
+      alertAgentId = agents[0].id;
+      alertKind = web.arg("k") == "p" ? 'p' : 'f';
+      alertStart = millis();
+    } else if (v == "toggle") {
+      userAll = !userAll;
+    }
+    rebuildView();
+    pendingRedraw = true;
+    web.send(200, "application/json", "{\"ok\":true}");
+  });
+  const char *headers[] = {"X-Cubicle-Key"};
+  web.collectHeaders(headers, 1);
   web.begin();
 }
 
@@ -742,7 +1108,7 @@ void initDisplay() {
   gfx->fillScreen(C_BG);
   gfx->flush();
   pinMode(PIN_BL, OUTPUT);
-  digitalWrite(PIN_BL, HIGH);
+  analogWrite(PIN_BL, BL_FULL);
 }
 
 void setup() {
@@ -757,14 +1123,15 @@ void setup() {
   int r = rotationFromImu();
   applyRotation(r ? r : (saved == 3 ? 3 : 1));
   loadConfig();
+  lastActivityMs = millis();
 
-  drawMessage("Cubicle", "Conectando al Wi-Fi...");
+  drawMessage("Cubicle", "Wi-Fi...");
   // Portal NO bloqueante: mientras esperas en el móvil, la placa sigue atendiendo el USB.
   wm.setConfigPortalBlocking(false);
   wm.setConfigPortalTimeout(0);
   wm.setAPCallback([](WiFiManager *) {
     portalOpen = true;
-    drawMessage("Configura el Wi-Fi", "Desde el móvil, conéctate a la", "red \"Cubicle-Pantalla\"");
+    drawMessage("Wi-Fi", "Conecta el móvil a la red / Join the network", "\"Cubicle-Pantalla\"");
   });
   wm.autoConnect("Cubicle-Pantalla");
 }
@@ -787,19 +1154,20 @@ void loop() {
   }
   if (cfgHost.isEmpty() || cfgKey.isEmpty()) {
     static bool shown = false;
-    if (!shown) drawMessage("Falta configurar", "Conecta la pantalla por USB", "y guarda servidor y clave");
+    if (!shown) drawMessage("Cubicle", "Falta configurar: ./flash.sh config", "Not configured: ./flash.sh config");
     shown = true;
     delay(50);
     return;
   }
 
+  static bool dirty = true;
+
   // BOOT: toque corto = girar la pantalla; 3 s = olvidar el Wi-Fi.
   static uint32_t bootSince = 0;
-  static bool dirtyRot = false;
   if (digitalRead(PIN_BOOT) == LOW) {
     if (!bootSince) bootSince = millis();
     if (millis() - bootSince > 3000) {
-      drawMessage("Wi-Fi olvidado", "Reiniciando...");
+      drawMessage("Wi-Fi", T("Wi-Fi olvidado. Reiniciando...", "Wi-Fi forgotten. Restarting..."));
       wm.resetSettings();
       delay(500);
       ESP.restart();
@@ -807,7 +1175,7 @@ void loop() {
   } else {
     if (bootSince && millis() - bootSince > 30 && millis() - bootSince < 1000) {
       setManualRotation(rotation == 1 ? 3 : 1);
-      dirtyRot = true;
+      dirty = true;
     }
     bootSince = 0;
   }
@@ -827,47 +1195,85 @@ void loop() {
       applyRotation(r);
       rotationManual = false;
       want = 0;
-      dirtyRot = true;
+      dirty = true;
     }
   }
 
-  static uint32_t lastFetch = 0;
-  static bool dirty = true;
-  static bool hadError = false;
-  static bool touching = false;
+  // Datos: agentes cada 2 s, resumen cada 30 s, y un sprite que falte en los huecos.
+  static uint32_t lastFetch = 0, lastSummary = 0;
+  static bool hadError = false, touching = false;
+  static int lastSelectedId = -1;
   if (!touching && millis() - lastFetch > 2000) {
     lastFetch = millis();
     bool changed = fetchAgents();
-    // Si cambia el seleccionado en la oficina y está en otra diapositiva, se pasa a ella.
-    static int lastSelectedId = -1;
-    int selId = -1;
-    for (int i = 0; i < agentCount; i++)
-      if (agents[i].selected) selId = agents[i].id;
-    if (selId != lastSelectedId) {
-      lastSelectedId = selId;
-      int sp = selectedPage();
-      if (sp >= 0 && sp != page) goToPage(sp, sp > page ? 1 : -1);
-    }
     bool hasError = errorText.length() > 0;
+    if (changed) {
+      rebuildView();
+      // Si cambia el seleccionado en la oficina y está en otra diapositiva, se pasa a ella.
+      int selId = -1;
+      for (int i = 0; i < agentCount; i++)
+        if (agents[i].selected) selId = agents[i].id;
+      if (selId != lastSelectedId) {
+        lastSelectedId = selId;
+        int sp = selectedPage();
+        if (sp >= 0 && sp != page) goToPage(sp, sp > page ? 1 : -1);
+      }
+    }
     if (changed || hasError != hadError) dirty = true;
     hadError = hasError;
+  } else if (!touching && errorText.isEmpty() && (!haveSummary || millis() - lastSummary > 30000) && millis() - lastSummary > 3000) {
+    lastSummary = millis();
+    if (fetchSummary()) dirty = true;
   } else if (!touching && errorText.isEmpty() && loadMissingSprite()) {
     dirty = true;
   }
 
-  // Toque: las franjas laterales (o deslizar) cambian de diapositiva; tocar y soltar sobre una ficha la abre.
+  // Paso a reposo tras 5 min sin agentes activos ni toques.
+  static uint32_t lastModeCheck = 0;
+  if (millis() - lastModeCheck > 1000) {
+    lastModeCheck = millis();
+    if (rebuildView()) dirty = true;
+  }
+
+  // Fin del aviso.
+  if (alertAgentId >= 0 && millis() - alertStart > ALERT_MS) {
+    alertAgentId = -1;
+    dirty = true;
+  }
+
+  // Toque. Con aviso: abre ese agente. En reposo: despierta. En la cabecera: alterna ACTIVOS/TODOS.
+  // Franjas laterales (o deslizar): cambian de diapositiva. Sobre una ficha: la abre al soltar.
   static int downX = 0, downY = 0, lastX = 0;
+  static bool consumed = false;
   int x, y;
   bool down = readTouch(x, y);
   if (down && !touching) {
     downX = x;
     downY = y;
     pressedIndex = -1;
-    for (int slot = 0; slot < PER_PAGE; slot++) {
-      int cx, cy, cw, ch;
-      cellRect(slot, cx, cy, cw, ch);
-      int idx = pageFirst[page] + slot;
-      if (idx < pageLast[page] && x >= cx && x < cx + cw && y >= cy && y < cy + ch) pressedIndex = idx;
+    consumed = false;
+    lastActivityMs = millis();
+    if (alertAgentId >= 0) {
+      Agent *a = agentById(alertAgentId);
+      alertAgentId = -1;
+      consumed = true;
+      if (a) openAgent(*a);
+    } else if (mode == MODE_REST) {
+      rebuildView();
+      consumed = true;
+    } else if (y < HEADER_H + 4) {
+      if (activeCount() > 0) {
+        userAll = !userAll;
+        rebuildView();
+      }
+      consumed = true;
+    } else {
+      for (int slot = 0; slot < perPage(); slot++) {
+        int cx, cy, cw, ch;
+        cellRect(slot, cx, cy, cw, ch);
+        int i = pageFirst[page] + slot;
+        if (i < pageLast[page] && x >= cx && x < cx + cw && y >= cy && y < cy + ch) pressedIndex = view[i];
+      }
     }
     dirty = true;
   }
@@ -878,15 +1284,17 @@ void loop() {
       dirty = true;
     }
   } else if (touching) {
-    int dx = lastX - downX;
-    bool leftZone = downX < SIDE_W && downY > HEADER_H;
-    bool rightZone = downX >= W - SIDE_W && downY > HEADER_H;
-    if (pages() > 1 && (rightZone || dx < -SWIPE_PX)) {
-      goToPage((page + 1) % pages(), 1);
-    } else if (pages() > 1 && (leftZone || dx > SWIPE_PX)) {
-      goToPage((page + pages() - 1) % pages(), -1);
-    } else if (pressedIndex >= 0) {
-      openAgent(agents[pressedIndex]);
+    if (!consumed) {
+      int dx = lastX - downX;
+      bool leftZone = downX < SIDE_W && downY > HEADER_H;
+      bool rightZone = downX >= W - SIDE_W && downY > HEADER_H;
+      if (pages() > 1 && (rightZone || dx < -SWIPE_PX)) {
+        goToPage((page + 1) % pages(), 1);
+      } else if (pages() > 1 && (leftZone || dx > SWIPE_PX)) {
+        goToPage((page + pages() - 1) % pages(), -1);
+      } else if (pressedIndex >= 0 && pressedIndex < agentCount) {
+        openAgent(agents[pressedIndex]);
+      }
     }
     pressedIndex = -1;
     dirty = true;
@@ -911,15 +1319,14 @@ void loop() {
     dirty = true;
   }
 
-  // Animación de los Pokémon: ~10 fps.
+  // Animación de los Pokémon y del aviso (~10 fps); el reloj del reposo, cada 10 s.
   static uint32_t lastAnim = 0;
-  if (pageAnimates() && millis() - lastAnim > 100) {
+  if (millis() - lastAnim > (uint32_t)(screenAnimates() ? 100 : mode == MODE_REST ? 10000 : 30000)) {
     lastAnim = millis();
     dirty = true;
   }
 
-  if (dirtyRot || pendingRedraw) {
-    dirtyRot = false;
+  if (pendingRedraw) {
     pendingRedraw = false;
     dirty = true;
   }

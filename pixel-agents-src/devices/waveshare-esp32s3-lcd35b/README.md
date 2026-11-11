@@ -7,6 +7,7 @@ Tus agentes de Cubicle en una pantalla táctil por Wi-Fi, en una cuadrícula de 
 - Cubicle abre un servidor HTTP **aparte** en la red local (puerto 3101), solo con dos rutas y una clave propia (`X-Cubicle-Key`). El servidor de la oficina, que lleva la terminal, sigue escuchando solo en `127.0.0.1`. Está apagado hasta que `~/.pixel-agents/oficina/dispositivo.json` tenga `"enabled": true` (lo crea `flash.sh`).
   - `GET /device/agents` → `{ agents: [{ id, name, room, color, status: working|permission|idle, pokemon? }] }`
   - `GET /device/sprite/:id` → el GIF del Pokémon ya compuesto en RGB565 (solo en memoria).
+  - `GET /device/summary` → hora, idioma, prompts de hoy y consumo de la semana y de Fable.
   - `POST /device/open {"id": n}` → la oficina abre ese agente.
 - La pantalla consulta cada 2 s y solo redibuja si algo cambió.
 
@@ -26,6 +27,15 @@ Tus agentes de Cubicle en una pantalla táctil por Wi-Fi, en una cuadrícula de 
 
 Después basta el cable de carga: la pantalla funciona sola por Wi-Fi.
 
+## Vistas
+
+- **Activos** (por defecto si hay alguno): solo los agentes que te necesitan (primero, del que más lleva esperando) y los que trabajan, en grande y con cuánto llevan.
+- **Todos**: la cuadrícula completa por salas. Se alterna con Activos tocando la cabecera ("Ver todos" / "Ver activos").
+- **Reposo**: tras 5 min sin agentes activos ni toques: reloj, prompts de hoy y consumo de la semana y de Fable, con la luz atenuada. Un toque vuelve a Todos.
+- **Aviso**: cuando un agente termina o pide permiso, pantalla completa 5 s con su Pokémon y un borde que parpadea. Tocarlo abre el agente.
+
+Los textos salen en el idioma de la oficina (ES/EN).
+
 ## Uso
 
 - Tocar una ficha → se abre el agente en el computador. El agente seleccionado en la oficina sale con borde morado y la pantalla pasa a su diapositiva.
@@ -33,7 +43,7 @@ Después basta el cable de carga: la pantalla funciona sola por Wi-Fi.
 - Franjas con flecha a los lados (o deslizar) → diapositiva siguiente o anterior. Hasta 8 agentes por diapositiva, agrupados por sala (de la más usada a la menos en los últimos 30 días); una sala no se parte entre diapositivas si cabe en una.
 - Gira sola si está claramente de pie (acelerómetro QMI8658: horizontal al derecho o al revés). Tumbada, usa el giro elegido a mano: toque corto en BOOT o `http://cubicle-pantalla.local/rotate` (se guarda).
 - BOOT 3 s → olvida el Wi-Fi y vuelve a abrir el portal.
-- `./flash.sh ota` → actualizar el programa por Wi-Fi (sin cable de datos; contraseña = la clave de Cubicle). `http://cubicle-pantalla.local/info` → estado y acelerómetro.
+- `./flash.sh ota` → actualizar el programa por Wi-Fi (sin cable de datos; contraseña = la clave de Cubicle). `http://cubicle-pantalla.local/info` → estado y acelerómetro. Con la cabecera `X-Cubicle-Key`: `/shot` (captura de la pantalla en RGB565 crudo) y `/preview?v=rest|alert|toggle` (enseña una vista para revisarla).
 - `./flash.sh config` → solo vuelve a guardar servidor y clave (p. ej. si cambias de clave).
 - Por el puerto serie: `INFO` (estado), `WIFI_RESET`, `CFG {"host":"…","ip":"…","port":3101,"key":"…"}`.
 
