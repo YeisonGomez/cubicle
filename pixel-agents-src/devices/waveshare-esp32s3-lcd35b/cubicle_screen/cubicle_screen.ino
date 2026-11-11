@@ -388,6 +388,15 @@ void drawSprite(const Sprite &s, int cx, int bottom) {
     }
 }
 
+/** Flecha de línea tipo "<" o ">" (dir -1 o 1), de 3 px de grosor, centrada en (cx, cy). */
+void drawChevron(int cx, int cy, int dir) {
+  const int half = 12, depth = 7;
+  for (int t = -1; t <= 1; t++) {
+    gfx->drawLine(cx - dir * depth + t, cy - half, cx + dir * depth + t, cy, C_MUTED);
+    gfx->drawLine(cx + dir * depth + t, cy, cx - dir * depth + t, cy + half, C_MUTED);
+  }
+}
+
 void drawMessage(const char *title, const String &line1, const String &line2 = "") {
   gfx->fillScreen(C_BG);
   gfx->setFont(F_TITLE);
@@ -446,8 +455,8 @@ void draw() {
     int cy = HEADER_H + (H - HEADER_H - FOOTER_H) / 2;
     gfx->fillRoundRect(4, HEADER_H + GAP, SIDE_W - 6, H - HEADER_H - FOOTER_H - 2 * GAP, 8, C_CARD);
     gfx->fillRoundRect(W - SIDE_W + 2, HEADER_H + GAP, SIDE_W - 6, H - HEADER_H - FOOTER_H - 2 * GAP, 8, C_CARD);
-    gfx->fillTriangle(12, cy, 28, cy - 14, 28, cy + 14, C_MUTED);
-    gfx->fillTriangle(W - 12, cy, W - 28, cy - 14, W - 28, cy + 14, C_MUTED);
+    drawChevron(SIDE_W / 2 - 4, cy, -1);
+    drawChevron(W - SIDE_W / 2 + 2, cy, 1);
     int dots = pages();
     int x = W / 2 - (dots - 1) * 8;
     for (int i = 0; i < dots; i++) {
