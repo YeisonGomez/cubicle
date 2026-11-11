@@ -6,8 +6,9 @@
  * - Pide a Cubicle la lista de agentes cada 2 s (GET /device/agents) y los muestra en
  *   una cuadrícula de 4x2 por diapositiva: el Pokémon animado (GET /device/sprite/:id,
  *   ya en RGB565), el nombre, el color de su sala y su estado.
- * - Deslizar a los lados cambia de diapositiva; tocar un agente lo abre en el
- *   computador (POST /device/open).
+ * - Los agentes van agrupados por sala, de la más usada a la menos (orden del servidor).
+ * - Las franjas de los lados (o deslizar) cambian de diapositiva; tocar un agente lo
+ *   abre en el computador (POST /device/open).
  * - Mantener BOOT 3 s borra el Wi-Fi guardado y vuelve a abrir el portal.
  *
  * Servidor, puerto y clave se guardan por el puerto serie (ver README.md):
@@ -113,7 +114,9 @@ static const int HEADER_H = 30;
 static const int COLS = 4;
 static const int ROWS = 2;
 static const int PER_PAGE = COLS * ROWS;
-static const int GAP = 6;
+static const int GAP = 5;
+static const int SIDE_W = 40;    // franjas laterales para cambiar de diapositiva (el táctil es impreciso)
+static const int FOOTER_H = 14;  // puntos de diapositiva
 static const int SCALE = 3;  // sprites de 32 px → 96 px
 static const int SWIPE_PX = 50;
 
@@ -127,7 +130,40 @@ uint16_t hexTo565(const char *hex) {
 
 uint16_t statusColor(char st) { return st == 'w' ? C_WORK : st == 'p' ? C_NEED : C_IDLE; }
 const char *statusLabel(char st) { return st == 'w' ? "Trabajando" : st == 'p' ? "Te necesita" : "Libre"; }
-int pages() { return max(1, (agentCount + PER_PAGE - 1) / PER_PAGE); }
+// Diapositivas: los agentes de una sala (consecutivos, ya ordenados por uso) no se parten
+// entre diapositivas salvo que no quepan en una.
+static const int MAX_PAGES = MAX_AGENTS;
+int pageFirst[MAX_PAGES], pageLast[MAX_PAGES];  // [first, last)
+int pageCount = 1;
+void rebuildPages() {
+  pageCount = 0;
+  int i = 0;
+  pageFirst[0] = 0;
+  pageLast[0] = 0;
+  while (i < agentCount) {
+    int j = i;
+    while (j < agentCount && agents[j].room == agents[i].room) j++;
+    int size = j - i;
+    int used = pageCount ? pageLast[pageCount - 1] - pageFirst[pageCount - 1] : PER_PAGE;
+    if (used + size > PER_PAGE && !(used < PER_PAGE && size > PER_PAGE)) {
+      pageFirst[pageCount] = i;
+      pageLast[pageCount] = i;
+      pageCount++;
+    }
+    // Un grupo de más de PER_PAGE agentes se reparte en diapositivas llenas.
+    for (int k = i; k < j; k++) {
+      if (pageLast[pageCount - 1] - pageFirst[pageCount - 1] >= PER_PAGE) {
+        pageFirst[pageCount] = k;
+        pageLast[pageCount] = k;
+        pageCount++;
+      }
+      pageLast[pageCount - 1] = k + 1;
+    }
+    i = j;
+  }
+  if (pageCount == 0) pageCount = 1;
+}
+int pages() { return pageCount; }
 
 int textWidth(const String &s) {
   int16_t x1, y1;
@@ -234,6 +270,7 @@ bool fetchAgents() {
     const char *st = a["status"] | "idle";
     g.status = strcmp(st, "working") == 0 ? 'w' : strcmp(st, "permission") == 0 ? 'p' : 'i';
   }
+  rebuildPages();
   if (page >= pages()) page = pages() - 1;
   return true;
 }
@@ -249,9 +286,9 @@ bool loadMissingSprite() {
   // Primero los de la diapositiva visible.
   int order[MAX_AGENTS];
   int k = 0;
-  for (int i = page * PER_PAGE; i < min(agentCount, (page + 1) * PER_PAGE); i++) order[k++] = i;
+  for (int i = pageFirst[page]; i < pageLast[page]; i++) order[k++] = i;
   for (int i = 0; i < agentCount; i++)
-    if (i < page * PER_PAGE || i >= (page + 1) * PER_PAGE) order[k++] = i;
+    if (i < pageFirst[page] || i >= pageLast[page]) order[k++] = i;
   for (int j = 0; j < k; j++) {
     int id = agents[order[j]].sprite;
     if (id < 0 || findSprite(id)) continue;
@@ -330,9 +367,9 @@ void openAgent(const Agent &a) {
 // ── Dibujo ────────────────────────────────────────────────────────
 void cellRect(int slot, int &x, int &y, int &w, int &h) {
   int col = slot % COLS, row = slot / COLS;
-  w = (W - GAP * (COLS + 1)) / COLS;
-  h = (H - HEADER_H - GAP * (ROWS + 1)) / ROWS;
-  x = GAP + col * (w + GAP);
+  w = (W - 2 * SIDE_W - GAP * (COLS + 1)) / COLS;
+  h = (H - HEADER_H - FOOTER_H - GAP * (ROWS + 1)) / ROWS;
+  x = SIDE_W + GAP + col * (w + GAP);
   y = HEADER_H + GAP + row * (h + GAP);
 }
 
@@ -369,7 +406,7 @@ void drawMessage(const char *title, const String &line1, const String &line2 = "
 void draw() {
   gfx->fillScreen(C_BG);
 
-  // Cabecera: nombre, recuento y puntos de diapositiva.
+  // Cabecera: las salas de esta diapositiva (con su color) y, a la derecha, el recuento.
   int working = 0, needs = 0;
   for (int i = 0; i < agentCount; i++) {
     if (agents[i].status == 'w') working++;
@@ -382,32 +419,46 @@ void draw() {
     gfx->setCursor(10, 20);
     gfx->print(errorText);
   } else {
-    gfx->setFont(F_TITLE);
-    gfx->setTextColor(C_TEXT);
-    gfx->setCursor(10, 21);
-    gfx->print("Cubicle");
     gfx->setFont(F_SMALL);
-    gfx->setTextColor(C_WORK);
-    gfx->setCursor(100, 20);
-    gfx->printf("%d trabajando", working);
-    if (needs > 0) {
-      gfx->setTextColor(C_NEED);
-      gfx->setCursor(190, 20);
-      gfx->printf("%d te necesita%s", needs, needs > 1 ? "n" : "");
+    String right = String(working) + " trabajando";
+    if (needs > 0) right += "  " + String(needs) + (needs > 1 ? " te necesitan" : " te necesita");
+    int rw = textWidth(right);
+    gfx->setTextColor(needs > 0 ? C_NEED : C_WORK);
+    gfx->setCursor(W - 10 - rw, 20);
+    gfx->print(right);
+    gfx->setFont(F_NAME);
+    int hx = 10;
+    for (int i = pageFirst[page]; i < pageLast[page]; i++) {
+      if (i > pageFirst[page] && agents[i].room == agents[i - 1].room) continue;
+      String r = agents[i].room;
+      int tw = textWidth(r);
+      if (hx + 14 + tw > W - 20 - rw) break;
+      gfx->fillCircle(hx + 4, 15, 4, agents[i].color);
+      gfx->setTextColor(C_TEXT);
+      gfx->setCursor(hx + 13, 20);
+      gfx->print(r);
+      hx += 13 + tw + 14;
     }
   }
+
+  // Flechas laterales y puntos de diapositiva.
   if (pages() > 1) {
+    int cy = HEADER_H + (H - HEADER_H - FOOTER_H) / 2;
+    gfx->fillRoundRect(4, HEADER_H + GAP, SIDE_W - 6, H - HEADER_H - FOOTER_H - 2 * GAP, 8, C_CARD);
+    gfx->fillRoundRect(W - SIDE_W + 2, HEADER_H + GAP, SIDE_W - 6, H - HEADER_H - FOOTER_H - 2 * GAP, 8, C_CARD);
+    gfx->fillTriangle(12, cy, 28, cy - 14, 28, cy + 14, C_MUTED);
+    gfx->fillTriangle(W - 12, cy, W - 28, cy - 14, W - 28, cy + 14, C_MUTED);
     int dots = pages();
-    int x = W - 12 - (dots - 1) * 14;
+    int x = W / 2 - (dots - 1) * 8;
     for (int i = 0; i < dots; i++) {
-      if (i == page) gfx->fillCircle(x + i * 14, 15, 4, C_TEXT);
-      else gfx->drawCircle(x + i * 14, 15, 4, C_MUTED);
+      if (i == page) gfx->fillCircle(x + i * 16, H - 8, 4, C_TEXT);
+      else gfx->drawCircle(x + i * 16, H - 8, 4, C_MUTED);
     }
   }
 
   // Cuadrícula de la diapositiva.
-  int start = page * PER_PAGE;
-  for (int slot = 0; slot < PER_PAGE && start + slot < agentCount; slot++) {
+  int start = pageFirst[page];
+  for (int slot = 0; slot < PER_PAGE && start + slot < pageLast[page]; slot++) {
     const Agent &a = agents[start + slot];
     int x, y, w, h;
     cellRect(slot, x, y, w, h);
@@ -422,23 +473,23 @@ void draw() {
     int cx = x + w / 2;
     Sprite *s = a.sprite >= 0 ? findSprite(a.sprite) : nullptr;
     if (s && s->px) {
-      drawSprite(*s, cx, y + 102);
+      drawSprite(*s, cx, y + 96);
     } else {
       // Sin Pokémon (o aún cargando): la inicial en un círculo del color de la sala.
-      gfx->fillCircle(cx, y + 56, 30, a.color);
+      gfx->fillCircle(cx, y + 54, 28, a.color);
       gfx->setFont(F_TITLE);
       gfx->setTextColor(C_BG);
-      printCentered(a.name.substring(0, 1), cx, y + 63);
+      printCentered(a.name.substring(0, 1), cx, y + 61);
     }
     gfx->setFont(F_NAME);
     gfx->setTextColor(C_TEXT);
-    printCentered(fitText(a.name, w - 10), cx, y + 120);
+    printCentered(fitText(a.name, w - 8), cx, y + h - 20);
     gfx->setFont(F_SMALL);
     gfx->setTextColor(sc);
     String label = statusLabel(a.status);
     int lw = textWidth(label) + 12;
-    gfx->fillCircle(cx - lw / 2 + 3, y + 131, 3, sc);
-    gfx->setCursor(cx - lw / 2 + 12, y + 135);
+    gfx->fillCircle(cx - lw / 2 + 3, y + h - 10, 3, sc);
+    gfx->setCursor(cx - lw / 2 + 12, y + h - 6);
     gfx->print(label);
   }
   if (agentCount == 0 && !errorText.length()) {
@@ -459,7 +510,7 @@ void draw() {
 
 /** ¿Hay sprites animados en la diapositiva visible? */
 bool pageAnimates() {
-  for (int i = page * PER_PAGE; i < min(agentCount, (page + 1) * PER_PAGE); i++) {
+  for (int i = pageFirst[page]; i < pageLast[page]; i++) {
     Sprite *s = agents[i].sprite >= 0 ? findSprite(agents[i].sprite) : nullptr;
     if (s && s->n > 1) return true;
   }
@@ -588,7 +639,7 @@ void loop() {
     dirty = true;
   }
 
-  // Toque: deslizar a los lados cambia de diapositiva; tocar y soltar sobre una ficha la abre.
+  // Toque: las franjas laterales (o deslizar) cambian de diapositiva; tocar y soltar sobre una ficha la abre.
   static int downX = 0, downY = 0, lastX = 0;
   int x, y;
   bool down = readTouch(x, y);
@@ -599,8 +650,8 @@ void loop() {
     for (int slot = 0; slot < PER_PAGE; slot++) {
       int cx, cy, cw, ch;
       cellRect(slot, cx, cy, cw, ch);
-      int idx = page * PER_PAGE + slot;
-      if (idx < agentCount && x >= cx && x < cx + cw && y >= cy && y < cy + ch) pressedIndex = idx;
+      int idx = pageFirst[page] + slot;
+      if (idx < pageLast[page] && x >= cx && x < cx + cw && y >= cy && y < cy + ch) pressedIndex = idx;
     }
     dirty = true;
   }
@@ -612,8 +663,12 @@ void loop() {
     }
   } else if (touching) {
     int dx = lastX - downX;
-    if (abs(dx) > SWIPE_PX && pages() > 1) {
-      page = (page + (dx < 0 ? 1 : pages() - 1)) % pages();
+    bool leftZone = downX < SIDE_W && downY > HEADER_H;
+    bool rightZone = downX >= W - SIDE_W && downY > HEADER_H;
+    if (pages() > 1 && (rightZone || dx < -SWIPE_PX)) {
+      page = (page + 1) % pages();
+    } else if (pages() > 1 && (leftZone || dx > SWIPE_PX)) {
+      page = (page + pages() - 1) % pages();
     } else if (pressedIndex >= 0) {
       openAgent(agents[pressedIndex]);
     }

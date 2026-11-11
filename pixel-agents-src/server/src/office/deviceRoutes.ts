@@ -17,8 +17,10 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as path from 'path';
 
+import { promptDaysByAgent } from '../agentPromptDays.js';
 import type { AgentStateStore } from '../agentStateStore.js';
-import { officeDir } from '../officePaths.js';
+import { readConfig } from '../configPersistence.js';
+import { activityFile, officeDir } from '../officePaths.js';
 import { spriteFor } from './deviceSprites.js';
 import { resolveSkin } from './skinRoutes.js';
 
@@ -119,7 +121,60 @@ function rooms(): Map<string, string> {
   }
 }
 
-/** Agentes con nombre (uno por Directorio: el de id más bajo), ordenados por sala y nombre. */
+/** Uso de cada agente: prompts de los últimos 30 días y en total. */
+export interface Usage {
+  recent: number;
+  total: number;
+}
+const USAGE_TTL_MS = 5 * 60_000;
+const RECENT_DAYS = 30;
+let usageCache: { at: number; usage: Map<string, Usage> } | null = null;
+
+function usageByAgent(): Map<string, Usage> {
+  if (usageCache && Date.now() - usageCache.at < USAGE_TTL_MS) return usageCache.usage;
+  const usage = new Map<string, Usage>();
+  try {
+    const since = new Date(Date.now() - RECENT_DAYS * 86_400_000).toISOString().slice(0, 10);
+    const days = promptDaysByAgent(readConfig().directories, activityFile());
+    for (const [name, byDay] of Object.entries(days)) {
+      let recent = 0;
+      let total = 0;
+      for (const [day, n] of Object.entries(byDay)) {
+        total += n;
+        if (day >= since) recent += n;
+      }
+      usage.set(name, { recent, total });
+    }
+  } catch {
+    /* sin actividad: todos a cero */
+  }
+  usageCache = { at: Date.now(), usage };
+  return usage;
+}
+
+/**
+ * Orden de la pantalla: salas de más a menos usadas (prompts recientes y luego totales)
+ * y, dentro de cada sala, sus agentes igual; los agentes de una sala quedan juntos.
+ */
+export function sortByUsage<T extends { name: string; room: string }>(list: T[], usage: Map<string, Usage>): T[] {
+  const zero: Usage = { recent: 0, total: 0 };
+  const rooms = new Map<string, Usage>();
+  for (const a of list) {
+    const u = usage.get(a.name) ?? zero;
+    const r = rooms.get(a.room) ?? { recent: 0, total: 0 };
+    rooms.set(a.room, { recent: r.recent + u.recent, total: r.total + u.total });
+  }
+  const cmp = (x: Usage, y: Usage) => y.recent - x.recent || y.total - x.total;
+  return [...list].sort(
+    (a, b) =>
+      cmp(rooms.get(a.room) ?? zero, rooms.get(b.room) ?? zero) ||
+      a.room.localeCompare(b.room) ||
+      cmp(usage.get(a.name) ?? zero, usage.get(b.name) ?? zero) ||
+      a.name.localeCompare(b.name),
+  );
+}
+
+/** Agentes con nombre (uno por Directorio: el de id más bajo), agrupados por sala y ordenados por uso. */
 export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTracker, areaOf: (name: string) => string | undefined): DeviceAgent[] {
   const colors = rooms();
   let pokemon: Record<string, { name: string; id: number }> = {};
@@ -136,7 +191,7 @@ export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTr
     const room = areaOf(name) ?? '';
     byName.set(name, { id: a.id, name, room, color: colors.get(room) ?? ROOM_COLOR_FALLBACK, status: tracker.get(a.id), ...(pokemon[name] ? { pokemon: pokemon[name].name, sprite: pokemon[name].id } : {}) });
   }
-  return [...byName.values()].sort((x, y) => x.room.localeCompare(y.room) || x.name.localeCompare(y.name));
+  return sortByUsage([...byName.values()], usageByAgent());
 }
 
 /** macOS: pone al frente la pestaña de Cubicle en Chrome (o lo abre en el navegador). */

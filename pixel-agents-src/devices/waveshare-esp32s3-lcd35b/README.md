@@ -29,7 +29,7 @@ Después basta el cable de carga: la pantalla funciona sola por Wi-Fi.
 ## Uso
 
 - Tocar una ficha → se abre el agente en el computador.
-- Deslizar a los lados → diapositiva siguiente o anterior (8 agentes por diapositiva).
+- Franjas con flecha a los lados (o deslizar) → diapositiva siguiente o anterior. Hasta 8 agentes por diapositiva, agrupados por sala (de la más usada a la menos en los últimos 30 días); una sala no se parte entre diapositivas si cabe en una.
 - BOOT 3 s → olvida el Wi-Fi y vuelve a abrir el portal.
 - `./flash.sh config` → solo vuelve a guardar servidor y clave (p. ej. si cambias de clave).
 - Por el puerto serie: `INFO` (estado), `WIFI_RESET`, `CFG {"host":"…","port":3101,"key":"…"}`.
