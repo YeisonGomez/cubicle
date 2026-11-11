@@ -3,6 +3,7 @@
 # y le guarda servidor, puerto y clave (los de esta máquina).
 #   ./flash.sh            compilar + cargar + configurar
 #   ./flash.sh config     solo configurar (sin volver a cargar el programa)
+#   ./flash.sh ota        cargar por Wi-Fi (sin cable de datos; la placa debe estar encendida)
 # Requisitos: arduino-cli con el core esp32:esp32 3.2.0 y las librerías del README.
 set -euo pipefail
 
@@ -39,6 +40,18 @@ json.dump(c, open(p, "w"), indent=2)
 os.chmod(p, 0o600)
 PY
   echo "Pantalla externa activada en $CFG (reinicia Cubicle: cubicle restart)."
+fi
+
+if [[ "${1:-}" == "ota" ]]; then
+  KEY="$(python3 -c "import json;print(json.load(open('$CFG'))['key'])")"
+  BUILD="$(mktemp -d)"
+  arduino-cli compile --fqbn "$FQBN" --output-dir "$BUILD" "$SKETCH"
+  ESPOTA="$(ls -d "$HOME"/Library/Arduino15/packages/esp32/hardware/esp32/*/tools/espota.py "$HOME"/.arduino15/packages/esp32/hardware/esp32/*/tools/espota.py 2>/dev/null | tail -1)"
+  TARGET="${OTA_HOST:-cubicle-pantalla.local}"
+  python3 "$ESPOTA" -i "$TARGET" -a "$KEY" -f "$BUILD/cubicle_screen.ino.bin" -r
+  rm -rf "$BUILD"
+  echo "Pantalla actualizada por Wi-Fi ($TARGET)."
+  exit 0
 fi
 
 if [[ "${1:-}" != "config" ]]; then

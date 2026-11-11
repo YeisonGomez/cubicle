@@ -30,7 +30,9 @@ Después basta el cable de carga: la pantalla funciona sola por Wi-Fi.
 
 - Tocar una ficha → se abre el agente en el computador.
 - Franjas con flecha a los lados (o deslizar) → diapositiva siguiente o anterior. Hasta 8 agentes por diapositiva, agrupados por sala (de la más usada a la menos en los últimos 30 días); una sala no se parte entre diapositivas si cabe en una.
+- Gira sola según cómo la pongas (acelerómetro QMI8658: horizontal al derecho o al revés). Toque corto en BOOT → girar a mano (hasta reiniciarla).
 - BOOT 3 s → olvida el Wi-Fi y vuelve a abrir el portal.
+- `./flash.sh ota` → actualizar el programa por Wi-Fi (sin cable de datos; contraseña = la clave de Cubicle). `http://cubicle-pantalla.local/info` → estado y acelerómetro.
 - `./flash.sh config` → solo vuelve a guardar servidor y clave (p. ej. si cambias de clave).
 - Por el puerto serie: `INFO` (estado), `WIFI_RESET`, `CFG {"host":"…","ip":"…","port":3101,"key":"…"}`.
 

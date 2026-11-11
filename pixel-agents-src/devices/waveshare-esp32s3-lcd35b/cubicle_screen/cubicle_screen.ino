@@ -18,6 +18,8 @@
  * (0x3B). El reset de la pantalla va por el expansor TCA9554 (0x20, pin 1).
  */
 #include <Arduino.h>
+#include <ArduinoOTA.h>
+#include <WebServer.h>
 #include <ArduinoJson.h>
 #include <Arduino_GFX_Library.h>
 #include <ESPmDNS.h>
@@ -70,6 +72,8 @@ static const uint16_t SPRITE_KEY = 0xF81F;  // transparente en los sprites
 // ── Configuración guardada ────────────────────────────────────────
 Preferences prefs;
 WiFiManager wm;
+WebServer web(80);  // GET /info: estado y acelerómetro (diagnóstico, sin datos sensibles)
+bool netReady = false;
 bool portalOpen = false;
 bool mdnsReady = false;
 String cfgHost;
@@ -120,6 +124,17 @@ static const int SIDE_W = 40;    // franjas laterales para cambiar de diapositiv
 static const int FOOTER_H = 14;  // puntos de diapositiva
 static const int SCALE = 3;  // sprites de 32 px → 96 px
 static const int SWIPE_PX = 50;
+
+// ── Orientación: 1 = horizontal normal, 3 = horizontal al revés ─────
+// Se elige sola con el acelerómetro (QMI8658 por I2C) y, a mano, con un toque corto en BOOT.
+int rotation = 1;
+bool rotationManual = false;  // tras un toque en BOOT, manda el usuario hasta reiniciar
+uint8_t imuAddr = 0;          // 0 = sin sensor
+// Eje del acelerómetro que apunta a lo largo de la pantalla y signo con el que la
+// gravedad indica "al derecho" (rotación 1). Calibrado sobre la placa real.
+static const int IMU_AXIS = 0;  // 0 = x, 1 = y
+static const int IMU_SIGN_UPRIGHT = 1;
+static const int16_t IMU_THRESHOLD = 4000;  // ~0,25 g: por debajo, plana o dudosa → no se cambia
 
 // ── Utilidades ────────────────────────────────────────────────────
 uint16_t hexTo565(const char *hex) {
@@ -206,9 +221,68 @@ bool readTouch(int &x, int &y) {
   int ry = ((d[4] & 0x0F) << 8) | d[5];
   if (rx >= 320 || ry >= 480) return false;
   // Panel vertical (320x480) girado a horizontal (rotación 1 del lienzo).
-  x = ry;
-  y = 319 - rx;
+  if (rotation == 1) {
+    x = ry;
+    y = 319 - rx;
+  } else {
+    x = 479 - ry;
+    y = rx;
+  }
   return true;
+}
+
+// ── Acelerómetro QMI8658 ─────────────────────────────────────────
+bool imuWrite(uint8_t reg, uint8_t val) {
+  Wire.beginTransmission(imuAddr);
+  Wire.write(reg);
+  Wire.write(val);
+  return Wire.endTransmission() == 0;
+}
+
+bool imuRead(uint8_t reg, uint8_t *buf, uint8_t len) {
+  Wire.beginTransmission(imuAddr);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom(imuAddr, len) != len) return false;
+  Wire.readBytes(buf, len);
+  return true;
+}
+
+void initImu() {
+  for (uint8_t addr : {0x6B, 0x6A}) {
+    imuAddr = addr;
+    uint8_t who = 0;
+    if (imuRead(0x00, &who, 1) && who == 0x05) {
+      imuWrite(0x02, 0x40);  // CTRL1: direcciones con autoincremento
+      imuWrite(0x03, 0x05);  // CTRL2: acelerómetro ±2 g, frecuencia baja
+      imuWrite(0x08, 0x01);  // CTRL7: acelerómetro encendido
+      return;
+    }
+  }
+  imuAddr = 0;
+}
+
+bool readAccel(int16_t &ax, int16_t &ay, int16_t &az) {
+  uint8_t d[6];
+  if (!imuAddr || !imuRead(0x35, d, 6)) return false;
+  ax = (int16_t)(d[0] | (d[1] << 8));
+  ay = (int16_t)(d[2] | (d[3] << 8));
+  az = (int16_t)(d[4] | (d[5] << 8));
+  return true;
+}
+
+/** Rotación que pide la gravedad, o 0 si la pantalla está plana o en duda. */
+int rotationFromImu() {
+  int16_t a[3];
+  if (!readAccel(a[0], a[1], a[2])) return 0;
+  int16_t v = a[IMU_AXIS];
+  if (abs(v) < IMU_THRESHOLD) return 0;
+  return (v > 0) == (IMU_SIGN_UPRIGHT > 0) ? 1 : 3;
+}
+
+void applyRotation(int r) {
+  rotation = r;
+  gfx->setRotation(r);
 }
 
 // ── Red ───────────────────────────────────────────────────────────
@@ -572,11 +646,34 @@ void handleSerial() {
   } else if (line == "INFO") {
     Serial.printf("host=%s mac=%s backup=%s port=%u key=%s wifi=%s ip=%s agents=%d err=%s\n", cfgHost.c_str(), hostIp.toString().c_str(), cfgIp.c_str(), cfgPort, cfgKey.length() ? "(guardada)" : "(vacia)",
                   WiFi.status() == WL_CONNECTED ? WiFi.SSID().c_str() : "-", WiFi.localIP().toString().c_str(), agentCount, errorText.c_str());
+  } else if (line == "IMU") {
+    int16_t ax, ay, az;
+    if (readAccel(ax, ay, az)) Serial.printf("addr=0x%02X ax=%d ay=%d az=%d rotation=%d\n", imuAddr, ax, ay, az, rotation);
+    else Serial.println("sin sensor");
   } else if (line == "WIFI_RESET") {
     wm.resetSettings();
     Serial.println("OK");
     ESP.restart();
   }
+}
+
+// ── Actualización por Wi-Fi y estado ──────────────────────────────
+/** OTA (contraseña = la clave de Cubicle; `./flash.sh ota`) y GET /info. */
+void startNetServices() {
+  netReady = true;
+  ArduinoOTA.setHostname("cubicle-pantalla");
+  ArduinoOTA.setPassword(cfgKey.c_str());
+  ArduinoOTA.onStart([]() { drawMessage("Actualizando", "No la desconectes..."); });
+  ArduinoOTA.begin();
+  web.on("/info", []() {
+    int16_t ax = 0, ay = 0, az = 0;
+    bool imu = readAccel(ax, ay, az);
+    char out[200];
+    snprintf(out, sizeof(out), "{\"rotation\":%d,\"manual\":%s,\"imu\":%s,\"ax\":%d,\"ay\":%d,\"az\":%d,\"agents\":%d,\"error\":\"%s\"}",
+             rotation, rotationManual ? "true" : "false", imu ? "true" : "false", ax, ay, az, agentCount, errorText.c_str());
+    web.send(200, "application/json", out);
+  });
+  web.begin();
 }
 
 // ── Arranque ──────────────────────────────────────────────────────
@@ -603,6 +700,9 @@ void setup() {
   Serial.setTimeout(200);
   pinMode(PIN_BOOT, INPUT_PULLUP);
   initDisplay();
+  initImu();
+  int r = rotationFromImu();
+  if (r) applyRotation(r);
   loadConfig();
 
   drawMessage("Cubicle", "Conectando al Wi-Fi...");
@@ -623,6 +723,11 @@ void loop() {
     mdnsReady = MDNS.begin("cubicle-pantalla");
     portalOpen = false;
   }
+  if (WiFi.status() == WL_CONNECTED && !netReady && cfgKey.length()) startNetServices();
+  if (netReady) {
+    ArduinoOTA.handle();
+    web.handleClient();
+  }
   if (portalOpen) {
     delay(20);
     return;
@@ -635,8 +740,9 @@ void loop() {
     return;
   }
 
-  // BOOT 3 s: olvidar el Wi-Fi.
+  // BOOT: toque corto = girar la pantalla; 3 s = olvidar el Wi-Fi.
   static uint32_t bootSince = 0;
+  static bool dirtyRot = false;
   if (digitalRead(PIN_BOOT) == LOW) {
     if (!bootSince) bootSince = millis();
     if (millis() - bootSince > 3000) {
@@ -646,7 +752,30 @@ void loop() {
       ESP.restart();
     }
   } else {
+    if (bootSince && millis() - bootSince > 30 && millis() - bootSince < 1000) {
+      rotationManual = true;
+      applyRotation(rotation == 1 ? 3 : 1);
+      dirtyRot = true;
+    }
     bootSince = 0;
+  }
+
+  // Giro automático: la misma orientación durante ~1 s seguido (sin saltos al moverla).
+  static uint32_t lastImu = 0, wantSince = 0;
+  static int want = 0;
+  if (!rotationManual && imuAddr && millis() - lastImu > 250) {
+    lastImu = millis();
+    int r = rotationFromImu();
+    if (r == 0 || r == rotation) {
+      want = 0;
+    } else if (r != want) {
+      want = r;
+      wantSince = millis();
+    } else if (millis() - wantSince > 1000) {
+      applyRotation(r);
+      want = 0;
+      dirtyRot = true;
+    }
   }
 
   static uint32_t lastFetch = 0;
@@ -713,6 +842,10 @@ void loop() {
     dirty = true;
   }
 
+  if (dirtyRot) {
+    dirtyRot = false;
+    dirty = true;
+  }
   if (dirty) {
     draw();
     dirty = false;
