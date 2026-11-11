@@ -483,8 +483,11 @@ void openAgent(const Agent &a) {
   http.addHeader("Content-Type", "application/json");
   int code = http.POST("{\"id\":" + String(a.id) + "}");
   http.end();
-  toastText = code == 200 ? "Abriendo " + a.name : "No se pudo abrir (" + String(code) + ")";
-  toastUntil = millis() + 2000;
+  // Sin aviso al abrir (el agente se abre en el computador); solo si falla.
+  if (code != 200) {
+    toastText = "No se pudo abrir (" + String(code) + ")";
+    toastUntil = millis() + 2000;
+  }
 }
 
 // ── Dibujo ────────────────────────────────────────────────────────
@@ -636,7 +639,7 @@ void draw() {
     }
   }
 
-  // Aviso temporal (p. ej. "Abriendo X").
+  // Aviso temporal (solo errores al abrir).
   if (millis() < toastUntil) {
     gfx->fillRoundRect(60, H - 50, W - 120, 38, 10, C_TEXT);
     gfx->setFont(F_NAME);
