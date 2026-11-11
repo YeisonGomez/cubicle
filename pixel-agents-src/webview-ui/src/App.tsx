@@ -376,12 +376,16 @@ function App() {
   // si ese prompt completa el nivel, la evolución o el ascenso empiezan ahí, sin esperar al sondeo.
   const prevStatuses = useRef<Record<number, string>>({});
   useEffect(() => {
-    const started = Object.entries(agentStatuses).filter(([id, st]) => st === 'active' && prevStatuses.current[Number(id)] !== 'active');
+    // Activo = sin entrada en agentStatuses (useExtensionMessages la borra): empezó a
+    // trabajar quien tenía estado (libre/esperando) y ya no lo tiene, y sigue en la oficina.
+    const os = getOfficeState();
+    const started = Object.keys(prevStatuses.current)
+      .map(Number)
+      .filter((id) => prevStatuses.current[id] !== 'active' && !(id in agentStatuses) && os.characters.has(id));
     prevStatuses.current = agentStatuses;
     if (started.length === 0) return;
-    const os = getOfficeState();
-    for (const [id] of started) {
-      const name = os.characters.get(Number(id))?.directoryName;
+    for (const id of started) {
+      const name = os.characters.get(id)?.directoryName;
       if (name) markPrompted(name);
     }
     const id = setTimeout(() => void loadSkin(), SKIN_PROMPT_DELAY_MS);
