@@ -14,7 +14,7 @@ import { promptDaysByAgent } from '../agentPromptDays.js';
 import { readConfig } from '../configPersistence.js';
 import type { HttpServerOptions } from '../httpServer.js';
 import { activityFile, officeDir, scriptsDir } from '../officePaths.js';
-import { evolutionLevels, levelForXp, MAX_LEVEL, stageForLevel, XP_PER_PROMPT, xpForLevel, xpFromDays } from '../pokemonXp.js';
+import { evolutionLevels, levelForXp, MAX_LEVEL, XP_PER_PROMPT, xpForLevel, xpFromDays } from '../pokemonXp.js';
 import { nextRankLevel, rankForLevel } from '../ranks.js';
 import { bearerAuth, runProyecto } from './shared.js';
 
@@ -50,6 +50,10 @@ export interface PokeData {
   starters?: number[];
   /** Formas que flotan en vez de saltar (solo sprites estáticos). */
   fly?: number[];
+  /** Prompts para el nivel 100 en este tema (por defecto, PROMPTS_TO_MAX). */
+  promptsToMax?: number;
+  /** Niveles de evolución por nº de formas de la cadena, p. ej. { "2": [50], "3": [40, 70] }. */
+  evoLevels?: Record<string, number[]>;
 }
 /** Reparto de un tema: tipo de cada sala y personaje de cada agente. */
 export interface Assign {
@@ -92,9 +96,9 @@ export interface ToNext {
   prompts: number;
 }
 /** Prompts que faltan hasta un nivel (sin tope diario: cada prompt suma). */
-export function toNextLevel(xp: number, level: number | null | undefined): ToNext | null {
+export function toNextLevel(xp: number, level: number | null | undefined, promptsToMax?: number): ToNext | null {
   if (!level) return null;
-  return { prompts: Math.ceil(Math.max(0, xpForLevel(level) - xp) / XP_PER_PROMPT) };
+  return { prompts: Math.ceil(Math.max(0, xpForLevel(level, promptsToMax) - xp) / XP_PER_PROMPT) };
 }
 export interface AgentSkin {
   type: string;
@@ -347,9 +351,12 @@ export function resolveSkin(): {
       changed = true;
     }
     const xp = xpFromDays(prompts[d.name]);
-    const level = levelForXp(xp);
-    const progress = { level, xp, prompts: Math.round(xp / XP_PER_PROMPT), levelXp: xpForLevel(level), nextXp: level >= MAX_LEVEL ? xp : xpForLevel(level + 1) };
-    const stage = stageForLevel(level, path.length);
+    // Cada tema puede poner sus metas (Yu-Gi-Oh las lleva mucho más altas que Pokémon).
+    const toMax = data.promptsToMax;
+    const evoAt = data.evoLevels?.[String(path.length)] ?? evolutionLevels(path.length);
+    const level = levelForXp(xp, toMax);
+    const progress = { level, xp, prompts: Math.round(xp / XP_PER_PROMPT), levelXp: xpForLevel(level, toMax), nextXp: level >= MAX_LEVEL ? xp : xpForLevel(level + 1, toMax) };
+    const stage = evoAt.filter((l) => level >= l).length;
     // La primera vez se parte de la forma y el rango que ya corresponden, sin animación.
     const seen = Math.min(skin.seen[d.name] ?? stage, stage);
     if (skin.seen[d.name] !== seen) {
@@ -367,7 +374,7 @@ export function resolveSkin(): {
       continue;
     }
     const id = path[seen];
-    const nextLevel = evolutionLevels(path.length)[seen];
+    const nextLevel = evoAt[seen];
     agents[d.name] = {
       type,
       id,
@@ -379,7 +386,7 @@ export function resolveSkin(): {
       ...(data.fly?.includes(id) ? { fly: true } : {}),
       ...progress,
       evolvesAt: nextLevel ?? null,
-      toNext: toNextLevel(xp, nextLevel),
+      toNext: toNextLevel(xp, nextLevel, toMax),
       ...(stage > seen
         ? { evolving: { fromName: data.evo[id].name, from: url(id, 'idle'), toName: data.evo[path[seen + 1]].name, to: url(path[seen + 1], 'idle'), toId: path[seen + 1], stage: seen + 1 } }
         : {}),

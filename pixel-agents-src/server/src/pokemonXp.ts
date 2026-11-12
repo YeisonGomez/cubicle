@@ -11,14 +11,14 @@ export const PROMPTS_TO_MAX = 4000;
 const CURVE = 5 / 3;
 
 /** Experiencia total para llegar a un nivel. */
-export function xpForLevel(level: number): number {
+export function xpForLevel(level: number, promptsToMax = PROMPTS_TO_MAX): number {
   if (level <= 1) return 0;
-  return Math.round(XP_PER_PROMPT * PROMPTS_TO_MAX * ((Math.min(level, MAX_LEVEL) - 1) / (MAX_LEVEL - 1)) ** CURVE);
+  return Math.round(XP_PER_PROMPT * promptsToMax * ((Math.min(level, MAX_LEVEL) - 1) / (MAX_LEVEL - 1)) ** CURVE);
 }
 
-export function levelForXp(xp: number): number {
+export function levelForXp(xp: number, promptsToMax = PROMPTS_TO_MAX): number {
   let level = 1;
-  while (level < MAX_LEVEL && xp >= xpForLevel(level + 1)) level++;
+  while (level < MAX_LEVEL && xp >= xpForLevel(level + 1, promptsToMax)) level++;
   return level;
 }
 
