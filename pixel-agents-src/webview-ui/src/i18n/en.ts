@@ -241,7 +241,7 @@ export const en: Record<string, string> = {
   'skin.classic': 'Classic',
   'skin.pokemon': 'Pokémon',
   'skin.yugioh': 'Yu-Gi-Oh',
-  'skin.helpYugioh': 'Each office is an attribute (Dark, Light, Earth…) with its colors and floor, and each agent is a monster of that attribute that evolves with your prompts.',
+  'skin.helpYugioh': 'Each office is a deck (Yugi, Kaiba, Joey…) with its colors and floor. The first agent gets its most famous card and the rest a random one from that deck; some evolve with your prompts.',
   'skin.reshuffleYugioh': 'Reshuffle monsters',
   'skin.help': 'Each office is a Pokémon type (its colors and floor follow it) and each agent is a random Pokémon of that type from the first two generations.',
   'skin.reshuffle': 'Shuffle Pokémon again',

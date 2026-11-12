@@ -415,9 +415,9 @@ export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOpti
     writeSkin(skin);
     return reply.send(resolveSkin());
   });
-  // Cambiar tema, tipo de una sala o volver a sortear agentes. Luego `proyecto.py aplicar`
+  // Cambiar tema, tipo de una sala, volver a sortear agentes o elegir a mano (`assign`). Luego `proyecto.py aplicar`
   // recolorea las salas (colores y pisos por tipo) y lo empuja a la oficina en vivo.
-  app.put<{ Body: { theme?: string; rooms?: Record<string, string>; reshuffle?: string[] | 'all' } }>(
+  app.put<{ Body: { theme?: string; rooms?: Record<string, string>; reshuffle?: string[] | 'all'; assign?: Record<string, number> } }>(
     '/api/skin',
     { preHandler: bearerAuth(options.token) },
     async (request, reply) => {
@@ -430,6 +430,14 @@ export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOpti
       const data = readData(file.theme);
       if (!data) return reply.code(503).send({ error: `falta scripts/${DATA_FILE[file.theme]}` });
       const skin = assignOf(file);
+      // Reparto de una versión anterior (o recién creado): se vacía aquí, antes de aplicar lo pedido;
+      // si no, resolveSkin lo vaciaría después y se perdería la elección a mano.
+      if (skin.assignVersion !== ASSIGN_VERSION) {
+        skin.assignVersion = ASSIGN_VERSION;
+        skin.agents = {};
+        skin.paths = {};
+        skin.seen = {};
+      }
       if (b.rooms) {
         for (const [label, type] of Object.entries(b.rooms)) {
           if (!data.types[type]) return reply.code(400).send({ error: `tipo desconocido: ${type}` });
@@ -444,6 +452,18 @@ export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOpti
         skin.paths = {};
         skin.seen = {};
       } else if (Array.isArray(b.reshuffle)) for (const n of b.reshuffle) forget(skin, n);
+      // Elección a mano: el agente queda con esa forma exacta (y su cadena); evoluciona desde ahí.
+      if (b.assign) {
+        const parents = parentsOf(data);
+        for (const [name, id] of Object.entries(b.assign)) {
+          if (!data.evo[id]) return reply.code(400).send({ error: `forma desconocida: ${id}` });
+          const root = rootOf(id, parents);
+          const chain = choosePath(root, id, [], data);
+          skin.agents[name] = root;
+          skin.paths[name] = chain;
+          skin.seen[name] = Math.max(0, chain.indexOf(id));
+        }
+      }
       writeSkin(file);
       const out = resolveSkin();
       void runProyecto(options, ['aplicar']).then((r) => {

@@ -251,7 +251,7 @@ export const es: Record<string, string> = {
   'skin.classic': 'Clásico',
   'skin.pokemon': 'Pokémon',
   'skin.yugioh': 'Yu-Gi-Oh',
-  'skin.helpYugioh': 'Cada oficina es un atributo (Oscuridad, Luz, Tierra…) con sus colores y su piso, y cada agente es un monstruo de ese atributo que evoluciona con los prompts.',
+  'skin.helpYugioh': 'Cada oficina es una baraja (Yugi, Kaiba, Joey…) con sus colores y su piso. El primer agente recibe su carta más famosa y los demás, una al azar de esa baraja; algunas evolucionan con los prompts.',
   'skin.reshuffleYugioh': 'Volver a sortear monstruos',
   'skin.help': 'Cada oficina es un tipo de Pokémon (sus colores y su piso van con él) y cada agente es un Pokémon al azar de ese tipo, de las dos primeras generaciones.',
   'skin.reshuffle': 'Volver a sortear Pokémon',

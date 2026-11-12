@@ -1,31 +1,34 @@
 {
  "order": [
-  "dark",
-  "light",
-  "earth",
-  "fire",
-  "wind",
-  "water",
-  "divine"
+  "yugi",
+  "kaiba",
+  "joey",
+  "pegasus",
+  "mai",
+  "insect",
+  "sea",
+  "labyrinth",
+  "villains",
+  "gods"
  ],
  "types": {
-  "dark": {
-   "es": "Oscuridad",
-   "en": "Dark",
+  "yugi": {
+   "es": "Baraja de Yugi",
+   "en": "Yugi's deck",
    "color": "#9b5de5",
    "hue": 270,
    "sat": 40,
    "pokemon": [
     {
      "id": 1001,
-     "name": "Dark Magician Girl",
-     "slug": "darkmagiciangirl",
+     "name": "Dark Magician",
+     "slug": "darkmagician",
      "gen": 1
     },
     {
      "id": 1002,
-     "name": "Dark Magician",
-     "slug": "darkmagician",
+     "name": "Magician of Black Chaos",
+     "slug": "magicianobc",
      "gen": 1
     },
     {
@@ -36,101 +39,101 @@
     },
     {
      "id": 1004,
+     "name": "Dark Magician Girl",
+     "slug": "darkmagiciangirl",
+     "gen": 1
+    },
+    {
+     "id": 1005,
      "name": "Kuriboh",
      "slug": "kuriboh",
      "gen": 1
     },
     {
-     "id": 1005,
-     "name": "Winged Kuriboh",
-     "slug": "wingedkrb",
-     "gen": 1
-    },
-    {
      "id": 1006,
-     "name": "Winged Kuriboh LV10",
-     "slug": "wkurlv10",
-     "gen": 1
-    },
-    {
-     "id": 1007,
-     "name": "Red-Eyes B. Chick",
-     "slug": "bchick",
-     "gen": 1
-    },
-    {
-     "id": 1008,
-     "name": "Red-Eyes B. Dragon",
-     "slug": "redeyes",
-     "gen": 1
-    },
-    {
-     "id": 1009,
-     "name": "Red-Eyes Metal Dragon",
-     "slug": "redeyesmetal",
-     "gen": 1
-    },
-    {
-     "id": 1010,
-     "name": "Feral Imp",
-     "slug": "feralimp",
-     "gen": 1
-    },
-    {
-     "id": 1011,
      "name": "Summoned Skull",
      "slug": "summonedskull",
      "gen": 1
     },
     {
-     "id": 1012,
+     "id": 1007,
      "name": "Black Skull Dragon",
      "slug": "bskulldragon",
      "gen": 1
     },
     {
+     "id": 1008,
+     "name": "Celtic Guardian",
+     "slug": "celticguardian",
+     "gen": 1
+    },
+    {
+     "id": 1009,
+     "name": "Gaia The Fierce Knight",
+     "slug": "gaiatfknight",
+     "gen": 1
+    },
+    {
+     "id": 1010,
+     "name": "Gaia the Dragon Champion",
+     "slug": "gaiatdc",
+     "gen": 1
+    },
+    {
+     "id": 1011,
+     "name": "Black Luster Soldier",
+     "slug": "blacklusters",
+     "gen": 1
+    },
+    {
+     "id": 1012,
+     "name": "Buster Blader",
+     "slug": "busterblader",
+     "gen": 1
+    },
+    {
      "id": 1013,
-     "name": "Relinquished",
-     "slug": "relinquish",
+     "name": "Alpha The Magnet Warrior",
+     "slug": "alphatmw",
      "gen": 1
     },
     {
      "id": 1014,
-     "name": "Thousand-Eyes Restrict",
-     "slug": "teyesrestrict",
+     "name": "Beta The Magnet Warrior",
+     "slug": "betatmw",
      "gen": 1
     },
     {
      "id": 1015,
-     "name": "Jinzo",
-     "slug": "jinzo",
-     "gen": 1
-    },
-    {
-     "id": 1016,
-     "name": "Exodia",
-     "slug": "exodia",
+     "name": "Valkyrion the Magna Warrior",
+     "slug": "valkyrion",
      "gen": 1
     }
    ]
   },
-  "light": {
-   "es": "Luz",
-   "en": "Light",
-   "color": "#f4d35e",
-   "hue": 50,
+  "kaiba": {
+   "es": "Baraja de Kaiba",
+   "en": "Kaiba's deck",
+   "color": "#4cc9f0",
+   "hue": 195,
    "sat": 40,
    "pokemon": [
     {
-     "id": 1017,
+     "id": 1016,
      "name": "Blue-Eyes White Dragon",
      "slug": "blueeyes",
      "gen": 1
     },
     {
-     "id": 1018,
+     "id": 1017,
      "name": "Blue-Eyes Ultimate Dragon",
      "slug": "beudragon",
+     "gen": 1
+    },
+    {
+     "id": 1018,
+     "name": "Dragon Master Knight",
+     "slug": "dragonmasterk",
      "gen": 1
     },
     {
@@ -153,293 +156,368 @@
     },
     {
      "id": 1022,
-     "name": "Queen's Knight",
-     "slug": "queensknight",
+     "name": "Lord of D.",
+     "slug": "lordofd",
      "gen": 1
     },
     {
      "id": 1023,
-     "name": "King's Knight",
-     "slug": "kingsknight",
+     "name": "Vorse Raider",
+     "slug": "vorseraider",
      "gen": 1
     },
     {
      "id": 1024,
-     "name": "Jack's Knight",
-     "slug": "jacksknight",
+     "name": "Battle Ox",
+     "slug": "battleox",
      "gen": 1
     },
     {
      "id": 1025,
-     "name": "Time Wizard",
-     "slug": "timewizard",
-     "gen": 1
-    },
-    {
-     "id": 1026,
-     "name": "Mystical Elf",
-     "slug": "mysticalelf",
+     "name": "Saggi the Dark Clown",
+     "slug": "saggiclown",
      "gen": 1
     }
    ]
   },
-  "earth": {
-   "es": "Tierra",
-   "en": "Earth",
-   "color": "#b08968",
-   "hue": 30,
-   "sat": 35,
-   "pokemon": [
-    {
-     "id": 1027,
-     "name": "Celtic Guardian",
-     "slug": "celticguardian",
-     "gen": 1
-    },
-    {
-     "id": 1028,
-     "name": "Celtic Guard of Noble Arms",
-     "slug": "celticnoble",
-     "gen": 1
-    },
-    {
-     "id": 1029,
-     "name": "Petit Moth",
-     "slug": "petitmoth",
-     "gen": 1
-    },
-    {
-     "id": 1030,
-     "name": "Cocoon of Evolution",
-     "slug": "cocoonoe",
-     "gen": 1
-    },
-    {
-     "id": 1031,
-     "name": "Great Moth",
-     "slug": "greatmoth",
-     "gen": 1
-    },
-    {
-     "id": 1032,
-     "name": "Perfectly Ultimate Great Moth",
-     "slug": "pugmoth",
-     "gen": 1
-    },
-    {
-     "id": 1033,
-     "name": "Gaia The Fierce Knight",
-     "slug": "gaiatfknight",
-     "gen": 1
-    },
-    {
-     "id": 1034,
-     "name": "Gaia the Dragon Champion",
-     "slug": "gaiatdc",
-     "gen": 1
-    },
-    {
-     "id": 1035,
-     "name": "Alpha The Magnet Warrior",
-     "slug": "alphatmw",
-     "gen": 1
-    },
-    {
-     "id": 1036,
-     "name": "Beta The Magnet Warrior",
-     "slug": "betatmw",
-     "gen": 1
-    },
-    {
-     "id": 1037,
-     "name": "Valkyrion the Magna Warrior",
-     "slug": "valkyrion",
-     "gen": 1
-    },
-    {
-     "id": 1038,
-     "name": "Black Luster Soldier",
-     "slug": "blacklusters",
-     "gen": 1
-    },
-    {
-     "id": 1039,
-     "name": "Buster Blader",
-     "slug": "busterblader",
-     "gen": 1
-    }
-   ]
-  },
-  "fire": {
-   "es": "Fuego",
-   "en": "Fire",
+  "joey": {
+   "es": "Baraja de Joey",
+   "en": "Joey's deck",
    "color": "#ff6b35",
    "hue": 15,
    "sat": 45,
    "pokemon": [
     {
-     "id": 1040,
-     "name": "Flame Manipulator",
-     "slug": "flamem",
+     "id": 1026,
+     "name": "Red-Eyes B. Dragon",
+     "slug": "redeyes",
      "gen": 1
     },
     {
-     "id": 1041,
+     "id": 1027,
+     "name": "Red-Eyes Black Metal Dragon",
+     "slug": "redeyesmetal",
+     "gen": 1
+    },
+    {
+     "id": 1028,
      "name": "Flame Swordsman",
      "slug": "flameswrd",
      "gen": 1
     },
     {
-     "id": 1042,
-     "name": "Inpachi",
-     "slug": "inpachi",
+     "id": 1029,
+     "name": "Time Wizard",
+     "slug": "timewizard",
      "gen": 1
     },
     {
-     "id": 1043,
-     "name": "Charcoal Inpachi",
-     "slug": "charcoalinpachi",
+     "id": 1030,
+     "name": "Baby Dragon",
+     "slug": "babyd",
      "gen": 1
     },
     {
-     "id": 1044,
-     "name": "Blazing Inpachi",
-     "slug": "blazinginpachi",
+     "id": 1031,
+     "name": "Thousand Dragon",
+     "slug": "thousandd",
      "gen": 1
     },
     {
-     "id": 1045,
-     "name": "Lava Golem",
-     "slug": "lavagolem",
+     "id": 1032,
+     "name": "Jinzo",
+     "slug": "jinzo",
+     "gen": 1
+    },
+    {
+     "id": 1033,
+     "name": "Panther Warrior",
+     "slug": "pantherwarrior",
+     "gen": 1
+    },
+    {
+     "id": 1034,
+     "name": "Gearfried the Iron Knight",
+     "slug": "gearfried",
+     "gen": 1
+    },
+    {
+     "id": 1035,
+     "name": "Scapegoat",
+     "slug": "scapegoat",
      "gen": 1
     }
    ]
   },
-  "wind": {
-   "es": "Viento",
-   "en": "Wind",
+  "pegasus": {
+   "es": "Baraja de Pegasus",
+   "en": "Pegasus' deck",
+   "color": "#f15bb5",
+   "hue": 320,
+   "sat": 35,
+   "pokemon": [
+    {
+     "id": 1036,
+     "name": "Relinquished",
+     "slug": "relinquish",
+     "gen": 1
+    },
+    {
+     "id": 1037,
+     "name": "Thousand-Eyes Restrict",
+     "slug": "teyesrestrict",
+     "gen": 1
+    },
+    {
+     "id": 1038,
+     "name": "Blue-Eyes Toon Dragon",
+     "slug": "toonblueeyes",
+     "gen": 1
+    },
+    {
+     "id": 1039,
+     "name": "Toon Dark Magician Girl",
+     "slug": "toondmgirl",
+     "gen": 1
+    },
+    {
+     "id": 1040,
+     "name": "Toon Summoned Skull",
+     "slug": "toonskull",
+     "gen": 1
+    },
+    {
+     "id": 1041,
+     "name": "Toon Mermaid",
+     "slug": "toonmermaid",
+     "gen": 1
+    }
+   ]
+  },
+  "mai": {
+   "es": "Baraja de Mai",
+   "en": "Mai's deck",
+   "color": "#2ec4b6",
+   "hue": 174,
+   "sat": 35,
+   "pokemon": [
+    {
+     "id": 1042,
+     "name": "Harpie Lady",
+     "slug": "harpielady",
+     "gen": 1
+    },
+    {
+     "id": 1043,
+     "name": "Harpie Lady Sisters",
+     "slug": "harpiesisters",
+     "gen": 1
+    },
+    {
+     "id": 1044,
+     "name": "Harpie's Pet Dragon",
+     "slug": "harpiedragon",
+     "gen": 1
+    },
+    {
+     "id": 1045,
+     "name": "Cyber Harpie Lady",
+     "slug": "cyberharpie",
+     "gen": 1
+    }
+   ]
+  },
+  "insect": {
+   "es": "Insectos y dinosaurios",
+   "en": "Insects and dinosaurs",
    "color": "#7bd389",
    "hue": 140,
    "sat": 35,
    "pokemon": [
     {
      "id": 1046,
-     "name": "Harpie Lady",
-     "slug": "harpielady",
+     "name": "Insect Queen",
+     "slug": "insectqueen",
      "gen": 1
     },
     {
      "id": 1047,
-     "name": "Cyber Harpie Lady",
-     "slug": "cyberharpie",
+     "name": "Petit Moth",
+     "slug": "petitmoth",
      "gen": 1
     },
     {
      "id": 1048,
-     "name": "Harpie Lady Sisters",
-     "slug": "harpiesisters",
+     "name": "Cocoon of Evolution",
+     "slug": "cocoonoe",
      "gen": 1
     },
     {
      "id": 1049,
-     "name": "Baby Dragon",
-     "slug": "babyd",
+     "name": "Great Moth",
+     "slug": "greatmoth",
      "gen": 1
     },
     {
      "id": 1050,
-     "name": "Thousand Dragon",
-     "slug": "thousandd",
+     "name": "Perfectly Ultimate Great Moth",
+     "slug": "pugmoth",
+     "gen": 1
+    },
+    {
+     "id": 1051,
+     "name": "Two-Headed King Rex",
+     "slug": "2hkingrex",
+     "gen": 1
+    },
+    {
+     "id": 1052,
+     "name": "Man-Eater Bug",
+     "slug": "maneater",
      "gen": 1
     }
    ]
   },
-  "water": {
-   "es": "Agua",
-   "en": "Water",
+  "sea": {
+   "es": "Baraja del mar",
+   "en": "Sea deck",
    "color": "#3a86ff",
    "hue": 215,
    "sat": 45,
    "pokemon": [
     {
-     "id": 1051,
+     "id": 1053,
      "name": "The Legendary Fisherman",
      "slug": "legendaryfish",
      "gen": 1
     },
     {
-     "id": 1052,
-     "name": "The Legendary Fisherman II",
-     "slug": "legendaryfish2",
-     "gen": 1
-    },
-    {
-     "id": 1053,
-     "name": "T.A.D.P.O.L.E.",
-     "slug": "tadpole",
-     "gen": 1
-    },
-    {
      "id": 1054,
-     "name": "Des Frog",
-     "slug": "desfrog",
+     "name": "Fortress Whale",
+     "slug": "fortresswhale",
      "gen": 1
     },
     {
      "id": 1055,
-     "name": "D.3.S. Frog",
-     "slug": "d3sfrog",
-     "gen": 1
-    },
-    {
-     "id": 1056,
-     "name": "Penguin Soldier",
-     "slug": "penguinsoldier",
-     "gen": 1
-    },
-    {
-     "id": 1057,
-     "name": "Nightmare Penguin",
-     "slug": "emperorpenguin",
-     "gen": 1
-    },
-    {
-     "id": 1058,
      "name": "Kairyu-Shin",
      "slug": "kairyushin",
-     "gen": 1
-    },
-    {
-     "id": 1059,
-     "name": "Ocean Dragon Lord - Kairyu-Shin",
-     "slug": "odlkairyushin",
      "gen": 1
     }
    ]
   },
-  "divine": {
-   "es": "Divino",
-   "en": "Divine",
+  "labyrinth": {
+   "es": "Laberinto",
+   "en": "Labyrinth",
+   "color": "#d4a373",
+   "hue": 30,
+   "sat": 35,
+   "pokemon": [
+    {
+     "id": 1056,
+     "name": "Gate Guardian",
+     "slug": "gateguardian",
+     "gen": 1
+    },
+    {
+     "id": 1057,
+     "name": "Sanga of the Thunder",
+     "slug": "sanga",
+     "gen": 1
+    },
+    {
+     "id": 1058,
+     "name": "Gate Guardian of Thunder and Wind",
+     "slug": "ggthunderwind",
+     "gen": 1
+    },
+    {
+     "id": 1059,
+     "name": "Wall Shadow",
+     "slug": "wallshadow",
+     "gen": 1
+    }
+   ]
+  },
+  "villains": {
+   "es": "Villanos",
+   "en": "Villains",
+   "color": "#e63946",
+   "hue": 355,
+   "sat": 40,
+   "pokemon": [
+    {
+     "id": 1060,
+     "name": "Lava Golem",
+     "slug": "lavagolem",
+     "gen": 1
+    },
+    {
+     "id": 1061,
+     "name": "Dark Necrofear",
+     "slug": "darknecrofear",
+     "gen": 1
+    },
+    {
+     "id": 1062,
+     "name": "Revival Jam",
+     "slug": "revivaljam",
+     "gen": 1
+    },
+    {
+     "id": 1063,
+     "name": "The Masked Beast",
+     "slug": "maskbeast",
+     "gen": 1
+    },
+    {
+     "id": 1064,
+     "name": "Barrel Dragon",
+     "slug": "barreldragon",
+     "gen": 1
+    },
+    {
+     "id": 1065,
+     "name": "Zoa",
+     "slug": "zoa",
+     "gen": 1
+    },
+    {
+     "id": 1066,
+     "name": "Metalzoa",
+     "slug": "metalzoa",
+     "gen": 1
+    }
+   ]
+  },
+  "gods": {
+   "es": "Dioses egipcios",
+   "en": "Egyptian gods",
    "color": "#ffd166",
    "hue": 42,
    "sat": 45,
    "pokemon": [
     {
-     "id": 1060,
+     "id": 1067,
      "name": "Slifer the Sky Dragon",
      "slug": "slifer",
      "gen": 1
     },
     {
-     "id": 1061,
+     "id": 1068,
      "name": "Obelisk the Tormentor",
      "slug": "obelisk",
      "gen": 1
     },
     {
-     "id": 1062,
+     "id": 1069,
      "name": "The Winged Dragon of Ra",
      "slug": "ra",
+     "gen": 1
+    },
+    {
+     "id": 1070,
+     "name": "Exodia the Forbidden One",
+     "slug": "exodia",
      "gen": 1
     }
    ]
@@ -449,52 +527,51 @@
  "static": true,
  "starters": [
   1001,
-  1017,
-  1027,
-  1040,
+  1016,
+  1026,
+  1036,
+  1042,
   1046,
-  1051,
+  1053,
+  1056,
   1060,
-  1004,
-  1007,
-  1049
+  1067
  ],
  "fly": [
-  1004,
   1005,
-  1006,
   1007,
-  1008,
-  1009,
-  1012,
-  1013,
-  1014,
+  1010,
+  1016,
   1017,
-  1018,
-  1025,
-  1031,
-  1032,
-  1034,
+  1026,
+  1027,
+  1029,
+  1036,
+  1037,
+  1038,
+  1039,
+  1042,
+  1043,
+  1044,
+  1045,
   1046,
-  1047,
-  1048,
   1049,
   1050,
-  1060,
-  1062
+  1067,
+  1069
  ],
  "evo": {
   "1001": {
-   "name": "Dark Magician Girl",
-   "slug": "darkmagiciangirl",
+   "name": "Dark Magician",
+   "slug": "darkmagician",
    "gen": 1,
    "next": [
     1002
    ]
   },
   "1002": {
-   "name": "Dark Magician",
-   "slug": "darkmagician",
+   "name": "Magician of Black Chaos",
+   "slug": "magicianobc",
    "gen": 1,
    "next": [
     1003
@@ -507,108 +584,104 @@
    "next": []
   },
   "1004": {
+   "name": "Dark Magician Girl",
+   "slug": "darkmagiciangirl",
+   "gen": 1,
+   "next": []
+  },
+  "1005": {
    "name": "Kuriboh",
    "slug": "kuriboh",
    "gen": 1,
-   "next": [
-    1005
-   ]
-  },
-  "1005": {
-   "name": "Winged Kuriboh",
-   "slug": "wingedkrb",
-   "gen": 1,
-   "next": [
-    1006
-   ]
+   "next": []
   },
   "1006": {
-   "name": "Winged Kuriboh LV10",
-   "slug": "wkurlv10",
-   "gen": 1,
-   "next": []
-  },
-  "1007": {
-   "name": "Red-Eyes B. Chick",
-   "slug": "bchick",
-   "gen": 1,
-   "next": [
-    1008
-   ]
-  },
-  "1008": {
-   "name": "Red-Eyes B. Dragon",
-   "slug": "redeyes",
-   "gen": 1,
-   "next": [
-    1009
-   ]
-  },
-  "1009": {
-   "name": "Red-Eyes Metal Dragon",
-   "slug": "redeyesmetal",
-   "gen": 1,
-   "next": []
-  },
-  "1010": {
-   "name": "Feral Imp",
-   "slug": "feralimp",
-   "gen": 1,
-   "next": [
-    1011
-   ]
-  },
-  "1011": {
    "name": "Summoned Skull",
    "slug": "summonedskull",
    "gen": 1,
    "next": [
-    1012
+    1007
    ]
   },
-  "1012": {
+  "1007": {
    "name": "Black Skull Dragon",
    "slug": "bskulldragon",
    "gen": 1,
    "next": []
   },
+  "1008": {
+   "name": "Celtic Guardian",
+   "slug": "celticguardian",
+   "gen": 1,
+   "next": []
+  },
+  "1009": {
+   "name": "Gaia The Fierce Knight",
+   "slug": "gaiatfknight",
+   "gen": 1,
+   "next": [
+    1010
+   ]
+  },
+  "1010": {
+   "name": "Gaia the Dragon Champion",
+   "slug": "gaiatdc",
+   "gen": 1,
+   "next": []
+  },
+  "1011": {
+   "name": "Black Luster Soldier",
+   "slug": "blacklusters",
+   "gen": 1,
+   "next": []
+  },
+  "1012": {
+   "name": "Buster Blader",
+   "slug": "busterblader",
+   "gen": 1,
+   "next": []
+  },
   "1013": {
-   "name": "Relinquished",
-   "slug": "relinquish",
+   "name": "Alpha The Magnet Warrior",
+   "slug": "alphatmw",
    "gen": 1,
    "next": [
     1014
    ]
   },
   "1014": {
-   "name": "Thousand-Eyes Restrict",
-   "slug": "teyesrestrict",
+   "name": "Beta The Magnet Warrior",
+   "slug": "betatmw",
    "gen": 1,
-   "next": []
+   "next": [
+    1015
+   ]
   },
   "1015": {
-   "name": "Jinzo",
-   "slug": "jinzo",
+   "name": "Valkyrion the Magna Warrior",
+   "slug": "valkyrion",
    "gen": 1,
    "next": []
   },
   "1016": {
-   "name": "Exodia",
-   "slug": "exodia",
-   "gen": 1,
-   "next": []
-  },
-  "1017": {
    "name": "Blue-Eyes White Dragon",
    "slug": "blueeyes",
+   "gen": 1,
+   "next": [
+    1017
+   ]
+  },
+  "1017": {
+   "name": "Blue-Eyes Ultimate Dragon",
+   "slug": "beudragon",
    "gen": 1,
    "next": [
     1018
    ]
   },
   "1018": {
-   "name": "Blue-Eyes Ultimate Dragon",
-   "slug": "beudragon",
+   "name": "Dragon Master Knight",
+   "slug": "dragonmasterk",
    "gen": 1,
    "next": []
   },
@@ -635,288 +708,312 @@
    "next": []
   },
   "1022": {
-   "name": "Queen's Knight",
-   "slug": "queensknight",
+   "name": "Lord of D.",
+   "slug": "lordofd",
    "gen": 1,
-   "next": [
-    1023
-   ]
+   "next": []
   },
   "1023": {
-   "name": "King's Knight",
-   "slug": "kingsknight",
+   "name": "Vorse Raider",
+   "slug": "vorseraider",
    "gen": 1,
-   "next": [
-    1024
-   ]
+   "next": []
   },
   "1024": {
-   "name": "Jack's Knight",
-   "slug": "jacksknight",
+   "name": "Battle Ox",
+   "slug": "battleox",
    "gen": 1,
    "next": []
   },
   "1025": {
+   "name": "Saggi the Dark Clown",
+   "slug": "saggiclown",
+   "gen": 1,
+   "next": []
+  },
+  "1026": {
+   "name": "Red-Eyes B. Dragon",
+   "slug": "redeyes",
+   "gen": 1,
+   "next": [
+    1027
+   ]
+  },
+  "1027": {
+   "name": "Red-Eyes Black Metal Dragon",
+   "slug": "redeyesmetal",
+   "gen": 1,
+   "next": []
+  },
+  "1028": {
+   "name": "Flame Swordsman",
+   "slug": "flameswrd",
+   "gen": 1,
+   "next": []
+  },
+  "1029": {
    "name": "Time Wizard",
    "slug": "timewizard",
    "gen": 1,
    "next": []
   },
-  "1026": {
-   "name": "Mystical Elf",
-   "slug": "mysticalelf",
-   "gen": 1,
-   "next": []
-  },
-  "1027": {
-   "name": "Celtic Guardian",
-   "slug": "celticguardian",
-   "gen": 1,
-   "next": [
-    1028
-   ]
-  },
-  "1028": {
-   "name": "Celtic Guard of Noble Arms",
-   "slug": "celticnoble",
-   "gen": 1,
-   "next": []
-  },
-  "1029": {
-   "name": "Petit Moth",
-   "slug": "petitmoth",
-   "gen": 1,
-   "next": [
-    1030
-   ]
-  },
   "1030": {
-   "name": "Cocoon of Evolution",
-   "slug": "cocoonoe",
+   "name": "Baby Dragon",
+   "slug": "babyd",
    "gen": 1,
    "next": [
     1031
    ]
   },
   "1031": {
-   "name": "Great Moth",
-   "slug": "greatmoth",
+   "name": "Thousand Dragon",
+   "slug": "thousandd",
    "gen": 1,
-   "next": [
-    1032
-   ]
+   "next": []
   },
   "1032": {
-   "name": "Perfectly Ultimate Great Moth",
-   "slug": "pugmoth",
+   "name": "Jinzo",
+   "slug": "jinzo",
    "gen": 1,
    "next": []
   },
   "1033": {
-   "name": "Gaia The Fierce Knight",
-   "slug": "gaiatfknight",
+   "name": "Panther Warrior",
+   "slug": "pantherwarrior",
    "gen": 1,
-   "next": [
-    1034
-   ]
+   "next": []
   },
   "1034": {
-   "name": "Gaia the Dragon Champion",
-   "slug": "gaiatdc",
+   "name": "Gearfried the Iron Knight",
+   "slug": "gearfried",
    "gen": 1,
    "next": []
   },
   "1035": {
-   "name": "Alpha The Magnet Warrior",
-   "slug": "alphatmw",
+   "name": "Scapegoat",
+   "slug": "scapegoat",
    "gen": 1,
-   "next": [
-    1036
-   ]
+   "next": []
   },
   "1036": {
-   "name": "Beta The Magnet Warrior",
-   "slug": "betatmw",
+   "name": "Relinquished",
+   "slug": "relinquish",
    "gen": 1,
    "next": [
     1037
    ]
   },
   "1037": {
-   "name": "Valkyrion the Magna Warrior",
-   "slug": "valkyrion",
+   "name": "Thousand-Eyes Restrict",
+   "slug": "teyesrestrict",
    "gen": 1,
    "next": []
   },
   "1038": {
-   "name": "Black Luster Soldier",
-   "slug": "blacklusters",
+   "name": "Blue-Eyes Toon Dragon",
+   "slug": "toonblueeyes",
    "gen": 1,
    "next": []
   },
   "1039": {
-   "name": "Buster Blader",
-   "slug": "busterblader",
+   "name": "Toon Dark Magician Girl",
+   "slug": "toondmgirl",
    "gen": 1,
    "next": []
   },
   "1040": {
-   "name": "Flame Manipulator",
-   "slug": "flamem",
+   "name": "Toon Summoned Skull",
+   "slug": "toonskull",
    "gen": 1,
-   "next": [
-    1041
-   ]
+   "next": []
   },
   "1041": {
-   "name": "Flame Swordsman",
-   "slug": "flameswrd",
+   "name": "Toon Mermaid",
+   "slug": "toonmermaid",
    "gen": 1,
    "next": []
   },
   "1042": {
-   "name": "Inpachi",
-   "slug": "inpachi",
+   "name": "Harpie Lady",
+   "slug": "harpielady",
    "gen": 1,
    "next": [
     1043
    ]
   },
   "1043": {
-   "name": "Charcoal Inpachi",
-   "slug": "charcoalinpachi",
+   "name": "Harpie Lady Sisters",
+   "slug": "harpiesisters",
    "gen": 1,
-   "next": [
-    1044
-   ]
+   "next": []
   },
   "1044": {
-   "name": "Blazing Inpachi",
-   "slug": "blazinginpachi",
+   "name": "Harpie's Pet Dragon",
+   "slug": "harpiedragon",
    "gen": 1,
    "next": []
   },
   "1045": {
-   "name": "Lava Golem",
-   "slug": "lavagolem",
+   "name": "Cyber Harpie Lady",
+   "slug": "cyberharpie",
    "gen": 1,
    "next": []
   },
   "1046": {
-   "name": "Harpie Lady",
-   "slug": "harpielady",
+   "name": "Insect Queen",
+   "slug": "insectqueen",
    "gen": 1,
-   "next": [
-    1047
-   ]
+   "next": []
   },
   "1047": {
-   "name": "Cyber Harpie Lady",
-   "slug": "cyberharpie",
+   "name": "Petit Moth",
+   "slug": "petitmoth",
    "gen": 1,
    "next": [
     1048
    ]
   },
   "1048": {
-   "name": "Harpie Lady Sisters",
-   "slug": "harpiesisters",
+   "name": "Cocoon of Evolution",
+   "slug": "cocoonoe",
    "gen": 1,
-   "next": []
+   "next": [
+    1049
+   ]
   },
   "1049": {
-   "name": "Baby Dragon",
-   "slug": "babyd",
+   "name": "Great Moth",
+   "slug": "greatmoth",
    "gen": 1,
    "next": [
     1050
    ]
   },
   "1050": {
-   "name": "Thousand Dragon",
-   "slug": "thousandd",
+   "name": "Perfectly Ultimate Great Moth",
+   "slug": "pugmoth",
    "gen": 1,
    "next": []
   },
   "1051": {
-   "name": "The Legendary Fisherman",
-   "slug": "legendaryfish",
+   "name": "Two-Headed King Rex",
+   "slug": "2hkingrex",
    "gen": 1,
-   "next": [
-    1052
-   ]
+   "next": []
   },
   "1052": {
-   "name": "The Legendary Fisherman II",
-   "slug": "legendaryfish2",
+   "name": "Man-Eater Bug",
+   "slug": "maneater",
    "gen": 1,
    "next": []
   },
   "1053": {
-   "name": "T.A.D.P.O.L.E.",
-   "slug": "tadpole",
+   "name": "The Legendary Fisherman",
+   "slug": "legendaryfish",
    "gen": 1,
-   "next": [
-    1054
-   ]
+   "next": []
   },
   "1054": {
-   "name": "Des Frog",
-   "slug": "desfrog",
+   "name": "Fortress Whale",
+   "slug": "fortresswhale",
    "gen": 1,
-   "next": [
-    1055
-   ]
+   "next": []
   },
   "1055": {
-   "name": "D.3.S. Frog",
-   "slug": "d3sfrog",
+   "name": "Kairyu-Shin",
+   "slug": "kairyushin",
    "gen": 1,
    "next": []
   },
   "1056": {
-   "name": "Penguin Soldier",
-   "slug": "penguinsoldier",
+   "name": "Gate Guardian",
+   "slug": "gateguardian",
    "gen": 1,
-   "next": [
-    1057
-   ]
+   "next": []
   },
   "1057": {
-   "name": "Nightmare Penguin",
-   "slug": "emperorpenguin",
+   "name": "Sanga of the Thunder",
+   "slug": "sanga",
    "gen": 1,
    "next": []
   },
   "1058": {
-   "name": "Kairyu-Shin",
-   "slug": "kairyushin",
+   "name": "Gate Guardian of Thunder and Wind",
+   "slug": "ggthunderwind",
    "gen": 1,
-   "next": [
-    1059
-   ]
+   "next": []
   },
   "1059": {
-   "name": "Ocean Dragon Lord - Kairyu-Shin",
-   "slug": "odlkairyushin",
+   "name": "Wall Shadow",
+   "slug": "wallshadow",
    "gen": 1,
    "next": []
   },
   "1060": {
+   "name": "Lava Golem",
+   "slug": "lavagolem",
+   "gen": 1,
+   "next": []
+  },
+  "1061": {
+   "name": "Dark Necrofear",
+   "slug": "darknecrofear",
+   "gen": 1,
+   "next": []
+  },
+  "1062": {
+   "name": "Revival Jam",
+   "slug": "revivaljam",
+   "gen": 1,
+   "next": []
+  },
+  "1063": {
+   "name": "The Masked Beast",
+   "slug": "maskbeast",
+   "gen": 1,
+   "next": []
+  },
+  "1064": {
+   "name": "Barrel Dragon",
+   "slug": "barreldragon",
+   "gen": 1,
+   "next": []
+  },
+  "1065": {
+   "name": "Zoa",
+   "slug": "zoa",
+   "gen": 1,
+   "next": [
+    1066
+   ]
+  },
+  "1066": {
+   "name": "Metalzoa",
+   "slug": "metalzoa",
+   "gen": 1,
+   "next": []
+  },
+  "1067": {
    "name": "Slifer the Sky Dragon",
    "slug": "slifer",
    "gen": 1,
    "next": []
   },
-  "1061": {
+  "1068": {
    "name": "Obelisk the Tormentor",
    "slug": "obelisk",
    "gen": 1,
    "next": []
   },
-  "1062": {
+  "1069": {
    "name": "The Winged Dragon of Ra",
    "slug": "ra",
+   "gen": 1,
+   "next": []
+  },
+  "1070": {
+   "name": "Exodia the Forbidden One",
+   "slug": "exodia",
    "gen": 1,
    "next": []
   }
