@@ -608,6 +608,59 @@ bool fetchAgents() {
   return true;
 }
 
+// Fondo de la vista de reposo (imagen del usuario ya compuesta por el servidor, RGB565).
+uint16_t *restBg = nullptr;
+int restBgVersion = 0;  // la que está cargada
+int restBgWanted = 0;   // la que anuncia el resumen (0 = sin fondo)
+uint32_t restBgTriedAt = 0;
+
+/** Baja el fondo de reposo si el servidor anuncia uno distinto del cargado. */
+bool fetchRestBg() {
+  if (restBgWanted == restBgVersion) return false;
+  if (restBgTriedAt && millis() - restBgTriedAt < 60000) return false;
+  restBgTriedAt = millis();
+  if (!restBgWanted) {
+    if (restBg) free(restBg);
+    restBg = nullptr;
+    restBgVersion = 0;
+    return true;
+  }
+  if (WiFi.status() != WL_CONNECTED || !resolveHost()) return false;
+  HTTPClient http;
+  http.setConnectTimeout(2000);
+  http.setTimeout(8000);
+  http.begin(baseUrl() + "/device/rest-bg");
+  http.addHeader("X-Cubicle-Key", cfgKey);
+  int code = http.GET();
+  const int len = W * H * 2;
+  if (code != 200 || http.getSize() != len) {
+    http.end();
+    return false;
+  }
+  uint8_t *buf = (uint8_t *)ps_malloc(len);
+  if (!buf) {
+    http.end();
+    return false;
+  }
+  WiFiClient *stream = http.getStreamPtr();
+  int got = 0;
+  uint32_t until = millis() + 12000;
+  while (got < len && millis() < until) {
+    int r = stream->readBytes(buf + got, min(len - got, 4096));
+    if (r <= 0) delay(5);
+    got += max(r, 0);
+  }
+  http.end();
+  if (got != len) {
+    free(buf);
+    return false;
+  }
+  if (restBg) free(restBg);
+  restBg = (uint16_t *)buf;
+  restBgVersion = restBgWanted;
+  return true;
+}
+
 /** Hora, idioma, prompts de hoy y consumo (para el reposo y los "hace cuánto"). */
 bool fetchSummary() {
   if (WiFi.status() != WL_CONNECTED || !resolveHost()) return false;
@@ -625,6 +678,7 @@ bool fetchSummary() {
   http.end();
   JsonDocument doc;
   if (deserializeJson(doc, body)) return false;
+  restBgWanted = doc["bg"] | 0;
   serverEpoch = doc["epoch"] | 0;
   baseEpoch = serverEpoch + (long)(doc["tz"] | 0);
   baseMillis = millis();
@@ -1040,20 +1094,46 @@ void drawMeter(int x, int y, int w, const char *title, int pct) {
 }
 
 void drawRest() {
-  gfx->fillScreen(C_BG);
+  // Con fondo propio, la figura va a la derecha y toda la información se apila a la izquierda.
+  const bool art = restBg != nullptr;
+  if (art) gfx->draw16bitRGBBitmap(0, 0, restBg, W, H);
+  else gfx->fillScreen(C_BG);
+  const int cx = art ? 150 : W / 2;
   uint32_t t = nowLocal();
   char clock[8] = "--:--";
   if (t) snprintf(clock, sizeof(clock), "%02lu:%02lu", (unsigned long)((t % 86400) / 3600), (unsigned long)((t % 3600) / 60));
   gfx->setFont(F_CLOCK);
   gfx->setTextColor(C_TEXT);
-  printCentered(clock, W / 2, 112);
+  printCentered(clock, cx, art ? 84 : 112);
   gfx->setFont(F_TITLE);
-  gfx->setTextColor(C_MUTED);
-  printCentered(sumDate, W / 2, 142);
+  gfx->setTextColor(art ? C_TEXT : C_MUTED);
+  printCentered(sumDate, cx, art ? 112 : 142);
   if (errorText.length()) {
     gfx->setFont(F_NAME);
     gfx->setTextColor(C_ERR);
-    printCentered(errorText, W / 2, 200);
+    printCentered(errorText, cx, 200);
+    return;
+  }
+  if (art) {
+    // Panel oscuro bajo las cifras: las barras se distinguen del fondo aunque tenga estrellas.
+    const int px = 20, pw = 260, py = 134, ph = 152;
+    gfx->fillRoundRect(px, py, pw, ph, 10, C_BG);
+    gfx->drawRoundRect(px, py, pw, ph, 10, C_CARD_HI);
+    gfx->setFont(F_NAME);
+    gfx->setTextColor(C_MUTED);
+    gfx->setCursor(px + 14, py + 30);
+    gfx->print(T("Prompts hoy", "Prompts today"));
+    gfx->setFont(F_BIG);
+    gfx->setTextColor(C_TEXT);
+    String n = String(sumPrompts);
+    gfx->setCursor(px + pw - 14 - textWidth(n), py + 34);
+    gfx->print(n);
+    drawMeter(px + 14, py + 68, pw - 28, T("Semana", "Week"), sumWeek);
+    drawMeter(px + 14, py + 114, pw - 28, "Fable", sumFable);
+    gfx->setFont(F_SMALL);
+    gfx->setTextColor(C_MUTED);
+    printCentered(T("Nadie te necesita.", "Nobody needs you."), cx, H - 12);
+    drawToggle();
     return;
   }
   // Tres columnas: prompts de hoy, semana y Fable.
@@ -1376,6 +1456,8 @@ void loop() {
   } else if (!touching && errorText.isEmpty() && (!haveSummary || millis() - lastSummary > 30000) && millis() - lastSummary > 3000) {
     lastSummary = millis();
     if (fetchSummary()) dirty = true;
+  } else if (!touching && errorText.isEmpty() && fetchRestBg()) {
+    dirty = true;
   } else if (!touching && errorText.isEmpty() && loadMissingSprite()) {
     dirty = true;
   }

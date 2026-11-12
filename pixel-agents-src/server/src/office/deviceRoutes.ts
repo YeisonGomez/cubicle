@@ -9,6 +9,7 @@
  *
  *   GET  /device/agents          → { agents: [{ id, name, room, color, status, pokemon?, sprite? }] }
  *   GET  /device/sprite/:n       → sprite animado del Pokémon n, listo para dibujar (deviceSprites.ts)
+ *   GET  /device/rest-bg      → fondo de la vista de reposo, 480x320 en RGB565 (deviceRestBg.ts)
  *   GET  /device/summary      → hora, idioma, prompts de hoy y consumo de la semana y de Fable (reposo)
  *   POST /device/evolved {"id": n, "stage": s} → la pantalla ya animó esa evolución
  *   POST /device/open  {"id": n} → la webview abre ese agente y el navegador pasa al frente
@@ -33,6 +34,7 @@ import { spriteFor } from './deviceSprites.js';
 import { getOfficeLang } from './language.js';
 import { getSessionHost, openInClaudeApp, sessionIdFor } from './sessionHost.js';
 import { bearerAuth } from './shared.js';
+import { restBackground, restBgVersion } from './deviceRestBg.js';
 import type { AgentSkin } from './skinRoutes.js';
 import { markEvolved, resolveSkin } from './skinRoutes.js';
 import { accountUsage } from './statsRoutes.js';
@@ -215,13 +217,19 @@ function rooms(): Map<string, string> {
 const localDay = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 /** Resumen para la pantalla en reposo. Porcentajes CONSUMIDOS; null = sin dato. */
-export function deviceSummary(): { epoch: number; tz: number; date: string; lang: string; promptsToday: number; week: number | null; fable: number | null } {
+/** Lienzo de la pantalla (apaisada). */
+const REST_BG_W = 480;
+const REST_BG_H = 320;
+
+export function deviceSummary(): { epoch: number; tz: number; date: string; lang: string; promptsToday: number; week: number | null; fable: number | null; bg: number } {
   const now = new Date();
   const lang = getOfficeLang();
   usageByAgent();
   const u = accountUsage();
   const fableLeftPct = u?.fable.remaining;
   return {
+    // Versión del fondo de reposo (0 = no hay): la placa lo vuelve a pedir si cambia.
+    bg: restBgVersion(),
     epoch: Math.floor(now.getTime() / 1000),
     tz: -now.getTimezoneOffset() * 60,
     date: now.toLocaleDateString(lang === 'es' ? 'es' : 'en', { weekday: 'long', day: 'numeric', month: 'long' }),
@@ -404,6 +412,12 @@ export function startDeviceServer(store: AgentStateStore, officePort: number, ar
         return res.end(data);
       }
       if (req.method === 'GET' && req.url === '/device/summary') return send(res, 200, deviceSummary());
+      if (req.method === 'GET' && req.url === '/device/rest-bg') {
+        const data = restBackground(REST_BG_W, REST_BG_H);
+        if (!data) return send(res, 404, { error: 'no background' });
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': data.length });
+        return res.end(data);
+      }
       if (req.method === 'POST' && req.url === '/device/evolved') {
         // La pantalla ya mostró la evolución: el agente pasa a su nueva forma.
         let body: { id?: unknown; stage?: unknown } = {};
