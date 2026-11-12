@@ -129,6 +129,7 @@ struct Sprite {
   uint32_t total = 0;
   uint16_t *px = nullptr;  // n frames de w*h en PSRAM
   bool failed = false;
+  bool hi = false;  // doble resolución ('CH', hasta 64 px): se dibuja a la mitad de escala
 };
 static const int MAX_SPRITES = 48;
 Sprite sprites[MAX_SPRITES];
@@ -689,11 +690,12 @@ bool loadMissingSprite() {
       got += max(r, 0);
     }
     http.end();
-    if (got != len || buf[0] != 'C' || buf[1] != 'S') {
+    if (got != len || buf[0] != 'C' || (buf[1] != 'S' && buf[1] != 'H')) {
       free(buf);
       slot->failed = true;
       return false;
     }
+    slot->hi = buf[1] == 'H';
     slot->w = buf[2];
     slot->h = buf[3];
     slot->n = min<int>(buf[4], 16);
@@ -743,6 +745,7 @@ void cellRect(int slot, int &x, int &y, int &w, int &h) {
 
 void drawSprite(const Sprite &s, int cx, int bottom, int scale) {
   if (!s.px || !s.n) return;
+  if (s.hi) scale = max(1, scale / 2);
   uint32_t t = s.total ? millis() % s.total : 0;
   int f = 0;
   while (f < s.n - 1 && t >= s.delay[f]) t -= s.delay[f++];
@@ -759,6 +762,7 @@ void drawSprite(const Sprite &s, int cx, int bottom, int scale) {
 /** Silueta de un sprite (primer cuadro) en un solo color. */
 void drawSpriteSolid(const Sprite &s, int cx, int bottom, int scale, uint16_t color) {
   if (!s.px || !s.n) return;
+  if (s.hi) scale = max(1, scale / 2);
   int x0 = cx - s.w * scale / 2;
   int y0 = bottom - s.h * scale;
   for (int y = 0; y < s.h; y++)

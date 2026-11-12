@@ -81,8 +81,9 @@ export function encodeGif(buf: ArrayBuffer): Buffer | null {
 }
 
 /**
- * Sprite de una sola imagen (PNG, tema Yu-Gi-Oh): se recorta a lo dibujado y, si pasa de
- * 32 px de lado, se reduce a la mitad para que ocupe lo mismo que un Pokémon en la placa.
+ * Sprite de una sola imagen (PNG de hasta 64 px, tema Yu-Gi-Oh): recortado a lo dibujado y a
+ * resolución completa. Va con la marca 'CH' en vez de 'CS': la placa lo dibuja a la mitad de
+ * escala, así ocupa lo que un Pokémon con el doble de detalle.
  */
 export function encodePng(buf: ArrayBuffer): Buffer | null {
   const png = PNG.sync.read(Buffer.from(buf));
@@ -96,12 +97,11 @@ export function encodePng(buf: ArrayBuffer): Buffer | null {
         y1 = Math.max(y1, y);
       }
   if (x1 < 0) return null;
-  const step = Math.max(x1 - x0 + 1, y1 - y0 + 1) > 32 ? 2 : 1;
-  const w = Math.ceil((x1 - x0 + 1) / step);
-  const h = Math.ceil((y1 - y0 + 1) / step);
+  const w = x1 - x0 + 1;
+  const h = y1 - y0 + 1;
   if (w > MAX_SIDE || h > MAX_SIDE) return null;
   const out = Buffer.alloc(5 + 2 + w * h * 2);
-  out.write('CS', 0, 'latin1');
+  out.write('CH', 0, 'latin1');
   out[2] = w;
   out[3] = h;
   out[4] = 1;
@@ -109,7 +109,7 @@ export function encodePng(buf: ArrayBuffer): Buffer | null {
   let o = 7;
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
-      const i = ((y0 + y * step) * png.width + x0 + x * step) * 4;
+      const i = ((y0 + y) * png.width + x0 + x) * 4;
       out.writeUInt16LE(png.data[i + 3] < 128 ? SPRITE_KEY : rgb565(png.data[i], png.data[i + 1], png.data[i + 2]), o);
       o += 2;
     }
