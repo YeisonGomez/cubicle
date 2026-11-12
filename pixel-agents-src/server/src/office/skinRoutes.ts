@@ -37,6 +37,8 @@ interface PokeForm {
   slug: string;
   gen: number;
   next: number[];
+  /** Sprite propio del usuario (`<oficina>/sprites/<slug>.png`), servido por la oficina. */
+  local?: boolean;
 }
 export interface PokeData {
   order: string[];
@@ -126,9 +128,38 @@ export interface AgentSkin {
 
 const skinFile = (): string => path.join(officeDir(), 'skin.json');
 
+/** Carpeta de sprites propios del usuario: nunca van al repo. */
+export const customSpritesDir = (): string => path.join(officeDir(), 'sprites');
+export const CUSTOM_SPRITE_URL = './api/skin/sprite/';
+const CUSTOM_SPRITE_FILE = /^[a-z0-9_-]{1,40}\.png$/;
+
+/**
+ * Cartas propias del tema Yu-Gi-Oh (`<oficina>/sprites/custom.json`): las que no trae el repo
+ * de sprites. Cada una { id (2001 en adelante, fijo), slug, name, group, fly? } con su
+ * `<slug>.png` al lado. Se suman a su baraja como cartas sin evolución.
+ */
+function addCustomCards(data: PokeData): void {
+  let list: Array<{ id?: unknown; slug?: unknown; name?: unknown; group?: unknown; fly?: unknown }>;
+  try {
+    list = JSON.parse(fs.readFileSync(path.join(customSpritesDir(), 'custom.json'), 'utf8'));
+  } catch {
+    return;
+  }
+  if (!Array.isArray(list)) return;
+  for (const c of list) {
+    if (typeof c.id !== 'number' || typeof c.slug !== 'string' || typeof c.name !== 'string' || typeof c.group !== 'string') continue;
+    if (data.evo[c.id] || !data.types[c.group] || !CUSTOM_SPRITE_FILE.test(`${c.slug}.png`)) continue;
+    data.evo[c.id] = { name: c.name, slug: c.slug, gen: 1, next: [], local: true };
+    data.types[c.group].pokemon.push({ id: c.id, name: c.name, slug: c.slug, gen: 1 });
+    if (c.fly === true) (data.fly ??= []).push(c.id);
+  }
+}
+
 function readData(theme: Theme = 'pokemon'): PokeData | null {
   try {
-    return JSON.parse(fs.readFileSync(path.join(scriptsDir(), DATA_FILE[theme]), 'utf8')) as PokeData;
+    const data = JSON.parse(fs.readFileSync(path.join(scriptsDir(), DATA_FILE[theme]), 'utf8')) as PokeData;
+    if (theme === 'yugioh') addCustomCards(data);
+    return data;
   } catch {
     return null;
   }
@@ -332,6 +363,7 @@ export function resolveSkin(): {
   const prompts = promptDaysByAgent(cfg.directories, activityFile());
   const url = (id: number, anim: string) => {
     const f = data.evo[id];
+    if (f?.local) return `${CUSTOM_SPRITE_URL}${f.slug}.png`;
     return data.sprite.replace('{gen}', String(f?.gen ?? 1)).replace('{slug}', f?.slug ?? '').replace('{anim}', anim);
   };
   for (const d of dirs) {
@@ -406,6 +438,16 @@ export function markEvolved(agent: string, stage: number): void {
 
 export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOptions): void {
   app.get('/api/skin', async () => resolveSkin());
+  // Sprite propio del usuario. Sin token: lo carga un <img>, igual que GET /api/skin.
+  app.get<{ Params: { file: string } }>('/api/skin/sprite/:file', async (request, reply) => {
+    const file = request.params.file;
+    if (!CUSTOM_SPRITE_FILE.test(file)) return reply.code(400).send({ error: 'nombre no válido' });
+    try {
+      return reply.type('image/png').header('Cache-Control', 'no-cache').send(fs.readFileSync(path.join(customSpritesDir(), file)));
+    } catch {
+      return reply.code(404).send({ error: 'no existe' });
+    }
+  });
   // La animación de evolución ya se mostró: el agente pasa a esa forma.
   app.post<{ Body: { agent?: string; stage?: number } }>('/api/skin/evolved', { preHandler: bearerAuth(options.token) }, async (request, reply) => {
     const { agent, stage } = request.body ?? {};

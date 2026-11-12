@@ -8,7 +8,11 @@
  * Solo en memoria: los sprites nunca se guardan en disco (© The Pokémon Company).
  */
 import { decompressFrames, parseGIF } from 'gifuct-js';
+import * as fs from 'fs';
+import * as path from 'path';
 import { PNG } from 'pngjs';
+
+import { officeDir } from '../officePaths.js';
 
 /** Magenta puro: el color clave de transparencia (un píxel real con ese color se corre a 0xF81E). */
 export const SPRITE_KEY = 0xf81f;
@@ -120,8 +124,9 @@ export function encodePng(buf: ArrayBuffer): Buffer | null {
 export function spriteFor(url: string): Promise<Buffer | null> {
   let p = cache.get(url);
   if (!p) {
-    p = fetch(url)
-      .then((r) => (r.ok ? r.arrayBuffer() : null))
+    // Sprite propio del usuario: está en disco, no en la red.
+    const local = url.startsWith('./api/skin/sprite/') ? path.join(officeDir(), 'sprites', path.basename(url)) : null;
+    p = (local ? fs.promises.readFile(local).then((b) => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer) : fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)))
       .then((b) => (b ? (/\.png(\?|$)/i.test(url) ? encodePng(b) : encodeGif(b)) : null))
       .catch(() => null);
     cache.set(url, p);
