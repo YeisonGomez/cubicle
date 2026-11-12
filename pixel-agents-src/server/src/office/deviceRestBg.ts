@@ -2,7 +2,7 @@
  * Fondo de la vista de reposo de la pantalla externa. El usuario deja imágenes PNG en
  * `<oficina>/reposo/` (datos suyos: nunca van al repo) y cada 10 minutos toca una al azar.
  * Se compone al tamaño de la pantalla: la propia imagen, ampliada, desenfocada y oscurecida,
- * cubre todo el lienzo, y encima va la imagen entera a la derecha, con los bordes fundidos;
+ * cubre todo el lienzo, y encima va la imagen a la derecha, fundida en óvalo (sin bordes rectos);
  * la izquierda queda libre para la hora y las barras. Sale en RGB565 (little endian), listo
  * para dibujar: la placa no decodifica PNG.
  */
@@ -13,9 +13,12 @@ import { PNG } from 'pngjs';
 import { officeDir } from '../officePaths.js';
 
 /** Ancho de la caja de la derecha donde cabe la figura entera. */
-const FIGURE_BOX_W = 232;
-/** Franja en que los bordes de la figura se funden con el fondo. */
-const FEATHER_PX = 26;
+const FIGURE_BOX_W = 256;
+/** La figura se funde con el fondo en óvalo (un borde recto se veía como un cuadrado pegado):
+ *  entera hasta esta fracción del radio y transparente al llegar al borde. */
+const OVAL_SOLID = 0.56;
+/** Sube al cambiar la composición: la placa vuelve a bajar el fondo. */
+const COMPOSE_VERSION = 2;
 /** Brillo del fondo desenfocado (la información se lee encima). */
 const BACKDROP_GAIN = 0.42;
 /** Miniatura de la que sale el desenfoque. */
@@ -64,7 +67,7 @@ export function currentRestBg(now = Date.now()): { file: string; version: number
   } catch {
     return null;
   }
-  return { file, version: ((slot % 100000) * 1000 + i * 37 + (mtime % 997)) % 1_000_000_000 || 1 };
+  return { file, version: ((slot % 100000) * 1000 + i * 37 + (mtime % 997) + COMPOSE_VERSION * 7919) % 1_000_000_000 || 1 };
 }
 
 /** Versión del fondo que toca; 0 si no hay. */
@@ -133,12 +136,17 @@ export function composeRestBg(img: Rgba, w: number, h: number): Buffer {
       let [r, g, b] = backdrop(x, y);
       const u = x - fx0, v = y - fy0;
       if (u >= 0 && u < fw && v >= 0 && v < fh) {
-        // Bordes fundidos, salvo los que tocan el borde del lienzo.
-        let a = Math.min(1, (u + 1) / FEATHER_PX);
-        if (fx0 + fw < w) a = Math.min(a, (fw - u) / FEATHER_PX);
-        if (fy0 > 0) a = Math.min(a, (v + 1) / FEATHER_PX);
-        if (fy0 + fh < h) a = Math.min(a, (fh - v) / FEATHER_PX);
+        // Máscara ovalada. En un lado que toca el borde del lienzo no hay nada que disimular:
+        // ahí el óvalo se alarga para no comerse la figura.
+        const nx = Math.abs(u + 0.5 - fw / 2) / (fw / 2);
+        const ny = (Math.abs(v + 0.5 - fh / 2) / (fh / 2)) * (fh >= h ? 0.72 : 1);
+        const d = Math.sqrt(nx * nx + ny * ny);
+        let a = 1 - Math.min(1, Math.max(0, (d - OVAL_SOLID) / (1 - OVAL_SOLID)));
         a = a * a * (3 - 2 * a);
+        if (a <= 0) {
+          out.writeUInt16LE(((Math.round(r) & 0xf8) << 8) | ((Math.round(g) & 0xfc) << 3) | (Math.round(b) >> 3), (y * w + x) * 2);
+          continue;
+        }
         const [pr, pg, pb] = boxAvg(img, u / scale, v / scale, (u + 1) / scale, (v + 1) / scale);
         r = r * (1 - a) + pr * a;
         g = g * (1 - a) + pg * a;
