@@ -52,6 +52,7 @@
 #define TOUCH_ADDR 0x3B
 
 // ── Pantalla: 480x320 en horizontal, dibujada en un lienzo en PSRAM ──
+static const uint32_t TOUCH_RELEASE_MS = 120;  // sin contacto este tiempo = dedo levantado
 static const int W = 480;
 static const int H = 320;
 TCA9554 tca(0x20);
@@ -1505,7 +1506,21 @@ void loop() {
   static int downX = 0, downY = 0, lastX = 0;
   static bool consumed = false;
   int x, y;
+  // El táctil pierde lecturas sueltas con el dedo quieto: sin este margen, cada hueco contaba
+  // como soltar y volver a tocar (un dedo apoyado en una flecha pasaba varias diapositivas).
+  // Solo se da por soltado tras TOUCH_RELEASE_MS seguidos sin contacto.
+  static uint32_t lastContactMs = 0;
+  static int heldX = 0, heldY = 0;
   bool down = readTouch(x, y);
+  if (down) {
+    lastContactMs = millis();
+    heldX = x;
+    heldY = y;
+  } else if (touching && millis() - lastContactMs < TOUCH_RELEASE_MS) {
+    down = true;
+    x = heldX;
+    y = heldY;
+  }
   if (down && !touching) {
     downX = x;
     downY = y;
