@@ -613,11 +613,17 @@ uint16_t *restBg = nullptr;
 int restBgVersion = 0;  // la que está cargada
 int restBgWanted = 0;   // la que anuncia el resumen (0 = sin fondo)
 uint32_t restBgTriedAt = 0;
+int restSkip = 0;          // cuántas imágenes se ha avanzado a toques
+bool restBgForce = false;  // un toque pidió la siguiente
 
 /** Baja el fondo de reposo si el servidor anuncia uno distinto del cargado. */
 bool fetchRestBg() {
-  if (restBgWanted == restBgVersion) return false;
-  if (restBgTriedAt && millis() - restBgTriedAt < 60000) return false;
+  if (!restBgForce) {
+    if (restBgWanted == restBgVersion) return false;
+    if (restBgTriedAt && millis() - restBgTriedAt < 60000) return false;
+    restSkip = 0;  // el servidor cambió de imagen por su cuenta: se vuelve a la que toca
+  }
+  restBgForce = false;
   restBgTriedAt = millis();
   if (!restBgWanted) {
     if (restBg) free(restBg);
@@ -629,7 +635,7 @@ bool fetchRestBg() {
   HTTPClient http;
   http.setConnectTimeout(2000);
   http.setTimeout(8000);
-  http.begin(baseUrl() + "/device/rest-bg");
+  http.begin(baseUrl() + "/device/rest-bg" + (restSkip > 0 ? "?skip=" + String(restSkip) : String("")));
   http.addHeader("X-Cubicle-Key", cfgKey);
   int code = http.GET();
   const int len = W * H * 2;
@@ -1515,6 +1521,11 @@ void loop() {
       }
     } else if (dimmed) {
       rebuildView();  // solo despierta (sube la luz)
+      consumed = true;
+    } else if (mode == MODE_REST && restBg && y >= HEADER_H + 4) {
+      // Reposo con fondo: un toque fuera de la cabecera pasa a la imagen siguiente.
+      restSkip++;
+      restBgForce = true;
       consumed = true;
     } else if (mode == MODE_REST || y < HEADER_H + 4) {
       // Cabecera (o cualquier punto del resumen): alterna la vista simplificada y TODOS.

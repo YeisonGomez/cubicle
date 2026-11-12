@@ -412,8 +412,10 @@ export function startDeviceServer(store: AgentStateStore, officePort: number, ar
         return res.end(data);
       }
       if (req.method === 'GET' && req.url === '/device/summary') return send(res, 200, deviceSummary());
-      if (req.method === 'GET' && req.url === '/device/rest-bg') {
-        const data = restBackground(REST_BG_W, REST_BG_H);
+      if (req.method === 'GET' && (req.url === '/device/rest-bg' || req.url?.startsWith('/device/rest-bg?'))) {
+        // ?skip=n: la n-ésima siguiente a la que toca (toques en la vista de reposo).
+        const skip = Number(new URL(req.url, 'http://x').searchParams.get('skip') ?? 0);
+        const data = restBackground(REST_BG_W, REST_BG_H, Number.isInteger(skip) && skip > 0 && skip < 10000 ? skip : 0);
         if (!data) return send(res, 404, { error: 'no background' });
         res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': data.length });
         return res.end(data);

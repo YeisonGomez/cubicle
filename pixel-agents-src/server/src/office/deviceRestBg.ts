@@ -16,9 +16,12 @@ import { officeDir } from '../officePaths.js';
 const FIGURE_BOX_W = 256;
 /** La figura se funde con el fondo en óvalo (un borde recto se veía como un cuadrado pegado):
  *  entera hasta esta fracción del radio y transparente al llegar al borde. */
-const OVAL_SOLID = 0.56;
+const OVAL_SOLID = 0.7;
+/** Exponente de la forma: 2 es un óvalo; más alto se acerca a un rectángulo de esquinas redondas
+ *  y deja ver más figura (con 2 las imágenes cuadradas quedaban en un círculo demasiado cerrado). */
+const OVAL_POWER = 3.2;
 /** Sube al cambiar la composición: la placa vuelve a bajar el fondo. */
-const COMPOSE_VERSION = 2;
+const COMPOSE_VERSION = 3;
 /** Brillo del fondo desenfocado (la información se lee encima). */
 const BACKDROP_GAIN = 0.42;
 /** Miniatura de la que sale el desenfoque. */
@@ -53,13 +56,15 @@ function pickFor(slot: number, n: number): number {
 }
 
 /** Imagen que toca ahora y su versión (cambia con el tramo o con el archivo); null si no hay. */
-export function currentRestBg(now = Date.now()): { file: string; version: number } | null {
+export function currentRestBg(skip = 0, now = Date.now()): { file: string; version: number } | null {
   const list = files();
   if (list.length === 0) return null;
   const slot = Math.floor(now / ROTATE_MS);
   let i = pickFor(slot, list.length);
   // Nunca la misma dos tramos seguidos.
   if (list.length > 1 && i === pickFor(slot - 1, list.length)) i = (i + 1) % list.length;
+  // `skip`: la pantalla pide la siguiente (un toque en el reposo las va pasando).
+  i = (i + Math.max(0, skip)) % list.length;
   const file = path.join(dir(), list[i]);
   let mtime = 0;
   try {
@@ -140,7 +145,7 @@ export function composeRestBg(img: Rgba, w: number, h: number): Buffer {
         // ahí el óvalo se alarga para no comerse la figura.
         const nx = Math.abs(u + 0.5 - fw / 2) / (fw / 2);
         const ny = (Math.abs(v + 0.5 - fh / 2) / (fh / 2)) * (fh >= h ? 0.72 : 1);
-        const d = Math.sqrt(nx * nx + ny * ny);
+        const d = (nx ** OVAL_POWER + ny ** OVAL_POWER) ** (1 / OVAL_POWER);
         let a = 1 - Math.min(1, Math.max(0, (d - OVAL_SOLID) / (1 - OVAL_SOLID)));
         a = a * a * (3 - 2 * a);
         if (a <= 0) {
@@ -159,8 +164,8 @@ export function composeRestBg(img: Rgba, w: number, h: number): Buffer {
 }
 
 /** Fondo de reposo ya compuesto, o null si el usuario no ha puesto imágenes. */
-export function restBackground(w: number, h: number): Buffer | null {
-  const cur = currentRestBg();
+export function restBackground(w: number, h: number, skip = 0): Buffer | null {
+  const cur = currentRestBg(skip);
   if (!cur) return null;
   const key = `${cur.file}:${cur.version}:${w}x${h}`;
   if (cached?.key === key) return cached.data;
