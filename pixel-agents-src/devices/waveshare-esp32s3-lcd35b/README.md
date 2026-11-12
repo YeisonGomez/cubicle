@@ -9,6 +9,7 @@ Tus agentes de Cubicle en una pantalla táctil por Wi-Fi, en una cuadrícula de 
   - `GET /device/sprite/:id` → el GIF del Pokémon ya compuesto en RGB565 (solo en memoria).
   - `GET /device/summary` → hora, idioma, prompts de hoy y consumo de la semana y de Fable.
   - `POST /device/open {"id": n}` → la oficina abre ese agente.
+  - `POST /device/evolved {"id": n, "stage": s}` → la pantalla ya mostró esa evolución.
 - La pantalla consulta cada 2 s y solo redibuja si algo cambió.
 
 ## Instalar
@@ -34,6 +35,9 @@ Después basta el cable de carga: la pantalla funciona sola por Wi-Fi.
 - **Reposo**: tras 5 min sin agentes activos ni toques: reloj, prompts de hoy y consumo de la semana y de Fable, con la luz atenuada. Un toque vuelve a Todos.
 - **Aviso**: cuando un agente termina o pide permiso, el borde de su ficha parpadea grueso 5 s; las demás fichas siguen a la vista.
 
+- **Experiencia** (tema Pokémon): cada ficha lleva el nivel, una barra de 10 tramos y los prompts que faltan para evolucionar.
+- **Evolución**: cuando un Pokémon sube lo suficiente, la pantalla lo anima a pantalla completa y, al cerrarla con un toque, el agente pasa a su forma nueva.
+
 Los textos salen en el idioma de la oficina (ES/EN).
 
 ## Uso
@@ -44,7 +48,7 @@ Los textos salen en el idioma de la oficina (ES/EN).
 - Franjas con flecha a los lados (o deslizar) → diapositiva siguiente o anterior. Hasta 8 agentes por diapositiva, agrupados por sala (de la más usada a la menos en los últimos 30 días); una sala no se parte entre diapositivas si cabe en una.
 - Gira sola si está claramente de pie (acelerómetro QMI8658: horizontal al derecho o al revés). Tumbada, usa el giro elegido a mano: toque corto en BOOT o `http://cubicle-pantalla.local/rotate` (se guarda).
 - BOOT 3 s → olvida el Wi-Fi y vuelve a abrir el portal.
-- `./flash.sh ota` → actualizar el programa por Wi-Fi (sin cable de datos; contraseña = la clave de Cubicle). `http://cubicle-pantalla.local/info` → estado y acelerómetro. Con la cabecera `X-Cubicle-Key`: `/shot` (captura de la pantalla en RGB565 crudo) y `/preview?v=rest|alert|toggle` (enseña una vista o el parpadeo de aviso para revisarlos).
+- `./flash.sh ota` → actualizar el programa por Wi-Fi (sin cable de datos; contraseña = la clave de Cubicle). `http://cubicle-pantalla.local/info` → estado y acelerómetro. Con la cabecera `X-Cubicle-Key`: `/shot` (captura de la pantalla en RGB565 crudo) y `/preview?v=rest|alert|evo|toggle` (enseña una vista o el parpadeo de aviso para revisarlos).
 - `./flash.sh config` → solo vuelve a guardar servidor y clave (p. ej. si cambias de clave).
 - Por el puerto serie: `INFO` (estado), `WIFI_RESET`, `CFG {"host":"…","ip":"…","port":3101,"key":"…"}`.
 

@@ -110,6 +110,13 @@ struct Agent {
   bool selected;   // seleccionado en la oficina
   uint32_t since;  // epoch (s) desde que está en su estado
   char status;     // 'w' trabajando, 'p' pide permiso, 'q' te necesita (sin mirar), 'i' libre
+  int level;       // nivel del Pokémon (0 = sin experiencia: tema clásico)
+  int xp;          // avance dentro del nivel, 0-100
+  int left;        // prompts que faltan para evolucionar (-1 = ya no evoluciona)
+  int evoTo;       // sprite de la forma a la que está por evolucionar (-1 = nada pendiente)
+  int evoStage;
+  int evoPrompts;  // prompts totales con este agente (el logro que se muestra al evolucionar)
+  String evoName;
 };
 static const int MAX_AGENTS = 48;
 Agent agents[MAX_AGENTS];
@@ -125,6 +132,17 @@ struct Sprite {
 };
 static const int MAX_SPRITES = 48;
 Sprite sprites[MAX_SPRITES];
+
+// Evolución: se anima a pantalla completa cuando el servidor la anuncia y, al acabar, se confirma.
+static const uint32_t EVO_INTRO_MS = 1800;    // la forma actual, quieta
+static const uint32_t EVO_REVEAL_MS = 6200;   // fin del parpadeo entre siluetas
+static const uint32_t EVO_END_MS = 15000;     // se cierra sola
+static const uint32_t EVO_WAIT_MS = 20000;    // espera máxima al sprite nuevo
+int evoAgentId = -1;  // agente con evolución en cola o en curso
+int evoFrom = -1, evoTarget = -1, evoStageNow = 0, evoPromptsNow = 0;
+String evoOldName, evoNewName, evoAgentName;
+uint32_t evoStart = 0, evoQueued = 0;
+bool evoPlaying = false;
 
 String lastPayload;
 String errorText;
@@ -183,6 +201,7 @@ char alertKind = 0;
 uint32_t alertStart = 0;
 int prevIds[MAX_AGENTS];
 char prevSt[MAX_AGENTS];
+int prevEvo[MAX_AGENTS];
 int prevN = -1;  // -1 = aún sin primera carga (no se avisa de lo que ya estaba)
 
 // ── Orientación: 1 = horizontal normal, 3 = horizontal al revés ─────
@@ -477,6 +496,19 @@ bool resolveHost() {
 
 String baseUrl() { return "http://" + hostIp.toString() + ":" + String(cfgPort); }
 
+void queueEvolution(const Agent &a) {
+  evoAgentId = a.id;
+  evoFrom = a.sprite;
+  evoTarget = a.evoTo;
+  evoStageNow = a.evoStage;
+  evoPromptsNow = a.evoPrompts;
+  evoOldName = a.pokemon;
+  evoNewName = a.evoName;
+  evoAgentName = a.name;
+  evoQueued = millis();
+  evoPlaying = false;
+}
+
 /** Avisa si un agente acaba de terminar o de pedir permiso (comparando con la carga anterior). */
 void detectAlerts() {
   if (prevN >= 0) {
@@ -488,6 +520,14 @@ void detectAlerts() {
       char kind = 0;
       if (now == 'p' && was != 'p') kind = 'p';
       else if (was == 'w' && (now == 'i' || now == 'q')) kind = 'f';
+      // Evolución: al anunciarse (o, si ya estaba pendiente, cuando ese agente termina un turno).
+      bool hadEvo = false, known = false;
+      for (int j = 0; j < prevN; j++)
+        if (prevIds[j] == agents[i].id) {
+          known = true;
+          hadEvo = prevEvo[j] >= 0;
+        }
+      if (agents[i].evoTo >= 0 && evoAgentId < 0 && ((known && !hadEvo) || kind == 'f')) queueEvolution(agents[i]);
       if (kind) {
         alertAgentId = agents[i].id;
         alertKind = kind;
@@ -500,6 +540,7 @@ void detectAlerts() {
   for (int i = 0; i < agentCount; i++) {
     prevIds[i] = agents[i].id;
     prevSt[i] = agents[i].status;
+    prevEvo[i] = agents[i].evoTo;
   }
 }
 
@@ -554,6 +595,13 @@ bool fetchAgents() {
     g.since = a["since"] | 0;
     const char *st = a["status"] | "idle";
     g.status = strcmp(st, "working") == 0 ? 'w' : strcmp(st, "permission") == 0 ? 'p' : strcmp(st, "question") == 0 ? 'q' : 'i';
+    g.level = a["level"] | 0;
+    g.xp = a["xp"] | 0;
+    g.left = a["left"] | -1;
+    g.evoTo = a["evolve"]["to"] | -1;
+    g.evoStage = a["evolve"]["stage"] | 0;
+    g.evoPrompts = a["evolve"]["prompts"] | 0;
+    g.evoName = (const char *)(a["evolve"]["toName"] | "");
   }
   detectAlerts();
   return true;
@@ -597,13 +645,14 @@ Sprite *findSprite(int id) {
 /** Descarga un sprite que falte (uno por llamada, para no frenar el táctil). Devuelve si cargó alguno. */
 bool loadMissingSprite() {
   // Primero los de la diapositiva visible; después, el resto.
-  int order[MAX_AGENTS * 2];
+  int order[MAX_AGENTS * 2 + 1];
   int k = 0;
+  if (evoAgentId >= 0) order[k++] = evoTarget;  // la forma nueva de una evolución en cola
   if (mode != MODE_REST)
-    for (int i = pageFirst[page]; i < pageLast[page]; i++) order[k++] = view[i];
-  for (int i = 0; i < agentCount; i++) order[k++] = i;
+    for (int i = pageFirst[page]; i < pageLast[page]; i++) order[k++] = agents[view[i]].sprite;
+  for (int i = 0; i < agentCount; i++) order[k++] = agents[i].sprite;
   for (int j = 0; j < k; j++) {
-    int id = agents[order[j]].sprite;
+    int id = order[j];
     if (id < 0 || findSprite(id)) continue;
     Sprite *slot = nullptr;
     for (auto &s : sprites)
@@ -705,6 +754,82 @@ void drawSprite(const Sprite &s, int cx, int bottom, int scale) {
       uint16_t c = p[y * s.w + x];
       if (c != SPRITE_KEY) gfx->fillRect(x0 + x * scale, y0 + y * scale, scale, scale, c);
     }
+}
+
+/** Silueta de un sprite (primer cuadro) en un solo color. */
+void drawSpriteSolid(const Sprite &s, int cx, int bottom, int scale, uint16_t color) {
+  if (!s.px || !s.n) return;
+  int x0 = cx - s.w * scale / 2;
+  int y0 = bottom - s.h * scale;
+  for (int y = 0; y < s.h; y++)
+    for (int x = 0; x < s.w; x++)
+      if (s.px[y * s.w + x] != SPRITE_KEY) gfx->fillRect(x0 + x * scale, y0 + y * scale, scale, scale, color);
+}
+
+/** Evolución a pantalla completa: la forma actual, siluetas que se alternan cada vez más rápido, destello y la forma nueva. */
+void drawEvolution() {
+  Sprite *from = findSprite(evoFrom), *to = findSprite(evoTarget);
+  uint32_t t = millis() - evoStart;
+  const int cx = W / 2, bottom = 196, scale = 5;
+  gfx->fillScreen(C_BG);
+  String line1, line2;
+  if (t < EVO_REVEAL_MS) {
+    line1 = String(T("¿Qué? ¡", "What? ")) + evoOldName + T(" está evolucionando!", " is evolving!");
+    line2 = evoAgentName;
+    if (t < EVO_INTRO_MS) {
+      if (from) drawSprite(*from, cx, bottom, scale);
+    } else {
+      // El cambio de silueta se acelera: de 2 a 12 por segundo.
+      float p = (float)(t - EVO_INTRO_MS) / (EVO_REVEAL_MS - EVO_INTRO_MS);
+      uint32_t steps = (uint32_t)((t - EVO_INTRO_MS) / 1000.0f * (2.0f + 5.0f * p));
+      Sprite *shown = steps % 2 ? to : from;
+      if (shown) drawSpriteSolid(*shown, cx, bottom, scale, C_TEXT);
+    }
+  } else if (t < EVO_REVEAL_MS + 250) {
+    gfx->fillScreen(C_TEXT);  // destello
+    gfx->flush();
+    return;
+  } else {
+    if (to) drawSprite(*to, cx, bottom, scale);
+    line1 = String(T("¡Felicidades! ", "Congratulations! ")) + evoOldName + T(" evolucionó a ", " evolved into ") + evoNewName;
+    line2 = evoAgentName + " · " + String(evoPromptsNow) + T(" prompts con este agente", " prompts with this agent");
+    gfx->setFont(F_SMALL);
+    gfx->setTextColor(C_MUTED);
+    printCentered(T("Toca para continuar", "Tap to continue"), cx, H - 14);
+  }
+  gfx->setFont(F_TITLE);
+  gfx->setTextColor(C_TEXT);
+  printCentered(fitText(line1, W - 24), cx, 236);
+  gfx->setFont(F_NAME);
+  gfx->setTextColor(C_XP);
+  printCentered(fitText(line2, W - 24), cx, 262);
+  gfx->flush();
+}
+
+/** Cierra la evolución y la confirma al servidor (stage 0 = vista previa, no se confirma). */
+void finishEvolution() {
+  if (evoStageNow > 0) {
+    HTTPClient http;
+    http.setConnectTimeout(2000);
+    http.setTimeout(3000);
+    http.begin(baseUrl() + "/device/evolved");
+    http.addHeader("X-Cubicle-Key", cfgKey);
+    http.addHeader("Content-Type", "application/json");
+    http.POST("{\"id\":" + String(evoAgentId) + ",\"stage\":" + String(evoStageNow) + "}");
+    http.end();
+  }
+  evoAgentId = -1;
+  evoPlaying = false;
+  lastPayload = "";  // la siguiente consulta trae ya la forma nueva
+}
+
+/** Barra de experiencia de 10 tramos. */
+void drawXpBar(int x, int y, int w, int h, int pct) {
+  const int gap = 2;
+  int seg = (w - 9 * gap) / 10;
+  int on = (pct + 5) / 10;
+  int x0 = x + (w - (seg * 10 + gap * 9)) / 2;
+  for (int i = 0; i < 10; i++) gfx->fillRect(x0 + i * (seg + gap), y, seg, h, i < on ? C_XP : C_CARD_HI);
 }
 
 /** Pokémon del agente o, si no hay (o aún carga), su inicial en un círculo del color de la sala. */
@@ -839,11 +964,28 @@ void drawCard(int slot, int idx) {
     printCentered(fitText(a.name, w - 10), cx, sb + 30);
     gfx->setFont(F_NAME);
     gfx->setTextColor(sc);
+    // Con experiencia, el tiempo va en la línea del estado y debajo queda sitio para la barra.
+    if (a.level > 0 && time.length() && textWidth(label + " · " + time) + 12 <= w - 10) {
+      label += " · " + time;
+      time = "";
+    }
     int lw = textWidth(label) + 12;
     gfx->fillCircle(cx - lw / 2 + 3, sb + 47, 4, sc);
     gfx->setCursor(cx - lw / 2 + 12, sb + 52);
     gfx->print(label);
-    if (time.length()) {
+    if (a.level > 0) {
+      drawXpBar(x + 14, sb + 61, w - 28, 6, a.xp);
+      gfx->setFont(F_SMALL);
+      gfx->setTextColor(C_MUTED);
+      gfx->setCursor(x + 14, sb + 80);
+      gfx->print(String(T("Nv ", "Lv ")) + String(a.level));
+      if (a.left > 0) {
+        String left = String(T("faltan ", "")) + String(a.left) + T(" prompts", " prompts left");
+        if (textWidth(left) > w - 28 - 36) left = String(T("faltan ", "")) + String(a.left) + T("", " left");
+        gfx->setCursor(x + w - 14 - textWidth(left), sb + 80);
+        gfx->print(left);
+      }
+    } else if (time.length()) {
       gfx->setFont(F_TITLE);
       gfx->setTextColor(C_MUTED);
       printCentered(time, cx, sb + 76);
@@ -851,6 +993,19 @@ void drawCard(int slot, int idx) {
     return;
   }
   drawAvatar(a, cx, y + 96, vScale);
+  if (a.level > 0) {
+    // Nivel y prompts que faltan en las esquinas de arriba; la barra, entre el Pokémon y el nombre.
+    gfx->setFont(F_SMALL);
+    gfx->setTextColor(C_MUTED);
+    gfx->setCursor(x + 6, y + 20);
+    gfx->print(String(T("Nv ", "Lv ")) + String(a.level));
+    if (a.left > 0) {
+      String left = String(T("faltan ", "")) + String(a.left) + T("", " left");
+      gfx->setCursor(x + w - 6 - textWidth(left), y + 20);
+      gfx->print(left);
+    }
+    drawXpBar(x + 8, y + 96, w - 16, 3, a.xp);
+  }
   gfx->setFont(F_NAME);
   gfx->setTextColor(C_TEXT);
   printCentered(fitText(a.name, w - 8), cx, y + h - 20);
@@ -913,6 +1068,10 @@ void drawRest() {
 }
 
 void draw() {
+  if (evoPlaying) {
+    drawEvolution();
+    return;
+  }
   if (mode == MODE_REST) {
     drawRest();
     gfx->flush();
@@ -956,7 +1115,7 @@ void draw() {
 
 /** ¿Hay sprites animados a la vista? */
 bool screenAnimates() {
-  if (alertAgentId >= 0) return true;
+  if (alertAgentId >= 0 || evoPlaying) return true;
   if (mode == MODE_REST) return false;
   for (int i = pageFirst[page]; i < pageLast[page]; i++) {
     const Agent &a = agents[view[i]];
@@ -1046,7 +1205,7 @@ void startNetServices() {
     web.send(200, "application/octet-stream", "");
     for (size_t o = 0; o < len; o += 4096) web.sendContent((const char *)fb + o, min((size_t)4096, len - o));
   });
-  // Vista previa para revisar la pantalla sin esperar: v=rest | alert | toggle. Pide la clave.
+  // Vista previa para revisar la pantalla sin esperar: v=rest | alert | evo | toggle. Pide la clave.
   web.on("/preview", []() {
     if (web.header("X-Cubicle-Key") != cfgKey) {
       web.send(401, "text/plain", "unauthorized");
@@ -1059,6 +1218,13 @@ void startNetServices() {
       alertAgentId = agents[viewCount > 0 ? view[pageFirst[page]] : 0].id;
       alertKind = web.arg("k") == "p" ? 'p' : 'f';
       alertStart = millis();
+    } else if (v == "evo" && agentCount > 1) {
+      // Evolución de muestra: el primer agente "evoluciona" al Pokémon del segundo. No se confirma.
+      queueEvolution(agents[0]);
+      evoTarget = agents[1].sprite;
+      evoNewName = agents[1].pokemon;
+      evoStageNow = 0;
+      evoPromptsNow = 350;
     } else if (v == "toggle") {
       userAll = !userAll;
     }
@@ -1214,6 +1380,25 @@ void loop() {
     if (rebuildView()) dirty = true;
   }
 
+  // Evolución en cola: empieza cuando ya están los dos sprites; si el nuevo no llega, se deja para otra vez.
+  if (evoAgentId >= 0 && !evoPlaying) {
+    Sprite *to = findSprite(evoTarget);
+    if (to && to->px) {
+      evoPlaying = true;
+      evoStart = millis();
+      lastActivityMs = millis();
+      dimmed = false;
+      analogWrite(PIN_BL, BL_FULL);
+      dirty = true;
+    } else if ((to && to->failed) || millis() - evoQueued > EVO_WAIT_MS) {
+      evoAgentId = -1;
+    }
+  }
+  if (evoPlaying && millis() - evoStart > EVO_END_MS) {
+    finishEvolution();
+    dirty = true;
+  }
+
   // Fin del aviso.
   if (alertAgentId >= 0 && millis() - alertStart > ALERT_MS) {
     alertAgentId = -1;
@@ -1232,7 +1417,14 @@ void loop() {
     pressedIndex = -1;
     consumed = false;
     lastActivityMs = millis();
-    if (dimmed) {
+    if (evoPlaying) {
+      // Durante la animación no se toca nada; al final, un toque la cierra.
+      consumed = true;
+      if (millis() - evoStart > EVO_REVEAL_MS) {
+        finishEvolution();
+        dirty = true;
+      }
+    } else if (dimmed) {
       rebuildView();  // solo despierta (sube la luz)
       consumed = true;
     } else if (mode == MODE_REST || y < HEADER_H + 4) {

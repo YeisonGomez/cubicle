@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DeviceStatusTracker, effectiveStatus, keyMatches, sortByUsage } from '../src/office/deviceRoutes.js';
+import { DeviceStatusTracker, effectiveStatus, keyMatches, sortByUsage, xpFields } from '../src/office/deviceRoutes.js';
 
 describe('pantalla externa', () => {
   it('estado: sin mensajes = libre; sigue los mismos avisos que la webview', () => {
@@ -62,5 +62,13 @@ describe('pantalla externa', () => {
     t.attended(1);
     t.onMessage({ type: 'agentStatus', id: 2, status: 'active' });
     expect([t.isPending(1), t.isPending(2)]).toEqual([false, false]);
+  });
+
+  it('experiencia: avance dentro del nivel, prompts que faltan y evolución pendiente', () => {
+    const base = { level: 24, xp: 150, levelXp: 100, nextXp: 200, prompts: 350, toNext: { prompts: 37 } };
+    expect(xpFields(base)).toEqual({ level: 24, xp: 50, left: 37 });
+    expect(xpFields({ ...base, toNext: null, xp: 200, levelXp: 200, nextXp: 200, level: 100 })).toEqual({ level: 100, xp: 100 });
+    const evolving = { fromName: 'A', from: 'a.gif', toName: 'B', to: 'b.gif', toId: 5, stage: 1 };
+    expect(xpFields({ ...base, evolving }).evolve).toEqual({ to: 5, toName: 'B', stage: 1, prompts: 350 });
   });
 });

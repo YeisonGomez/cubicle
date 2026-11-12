@@ -10,6 +10,7 @@
  *   GET  /device/agents          → { agents: [{ id, name, room, color, status, pokemon?, sprite? }] }
  *   GET  /device/sprite/:n       → sprite animado del Pokémon n, listo para dibujar (deviceSprites.ts)
  *   GET  /device/summary      → hora, idioma, prompts de hoy y consumo de la semana y de Fable (reposo)
+ *   POST /device/evolved {"id": n, "stage": s} → la pantalla ya animó esa evolución
  *   POST /device/open  {"id": n} → la webview abre ese agente y el navegador pasa al frente
  *                                  (con las sesiones en la app de Claude: se abre allí, sessionHost.ts)
  *
@@ -32,7 +33,8 @@ import { spriteFor } from './deviceSprites.js';
 import { getOfficeLang } from './language.js';
 import { getSessionHost, openInClaudeApp, sessionIdFor } from './sessionHost.js';
 import { bearerAuth } from './shared.js';
-import { resolveSkin } from './skinRoutes.js';
+import type { AgentSkin } from './skinRoutes.js';
+import { markEvolved, resolveSkin } from './skinRoutes.js';
 import { accountUsage } from './statsRoutes.js';
 
 export const DEVICE_PORT_DEFAULT = 3101;
@@ -61,6 +63,23 @@ export interface DeviceAgent {
   selected?: boolean;
   /** Desde cuándo está en ese estado (segundos epoch): la pantalla muestra cuánto lleva esperando. */
   since: number;
+  /** Experiencia (tema Pokémon): nivel, avance dentro del nivel (0-100) y prompts que faltan para evolucionar. */
+  level?: number;
+  xp?: number;
+  left?: number;
+  /** Evolución pendiente de mostrar: la pantalla la anima y la confirma con POST /device/evolved. */
+  evolve?: { to: number; toName: string; stage: number; prompts: number };
+}
+
+/** Campos de experiencia de un agente para la pantalla. */
+export function xpFields(p: Pick<AgentSkin, 'level' | 'xp' | 'levelXp' | 'nextXp' | 'toNext' | 'prompts' | 'evolving'>): Pick<DeviceAgent, 'level' | 'xp' | 'left' | 'evolve'> {
+  const span = p.nextXp - p.levelXp;
+  return {
+    level: p.level,
+    xp: span > 0 ? Math.max(0, Math.min(100, Math.round(((p.xp - p.levelXp) / span) * 100))) : 100,
+    ...(p.toNext ? { left: p.toNext.prompts } : {}),
+    ...(p.evolving ? { evolve: { to: p.evolving.toId, toName: p.evolving.toName, stage: p.evolving.stage, prompts: p.prompts } } : {}),
+  };
 }
 
 /** Agentes que la oficina muestra como "Te necesita" (pendientes de mirar). */
@@ -284,7 +303,7 @@ export function directoryForDeviceId(id: number): string | null {
  */
 export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTracker, areaOf: (name: string) => string | undefined): DeviceAgent[] {
   const colors = rooms();
-  let pokemon: Record<string, { name: string; id: number }> = {};
+  let pokemon: Record<string, AgentSkin> = {};
   try {
     const skin = resolveSkin();
     if (skin.theme === 'pokemon') pokemon = skin.agents;
@@ -308,7 +327,7 @@ export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTr
       color: colors.get(room) ?? ROOM_COLOR_FALLBACK,
       status: liveId === undefined ? 'idle' : effectiveStatus(tracker.get(liveId), liveId, inApp && tracker.isPending(liveId) ? new Set([...attention, liveId]) : attention),
       since: tracker.since(liveId ?? id),
-      ...(pokemon[name] ? { pokemon: pokemon[name].name, sprite: pokemon[name].id } : {}),
+      ...(pokemon[name] ? { pokemon: pokemon[name].name, sprite: pokemon[name].id, ...xpFields(pokemon[name]) } : {}),
       ...(liveId !== undefined && liveId === selectedId ? { selected: true } : {}),
     };
   });
@@ -376,13 +395,30 @@ export function startDeviceServer(store: AgentStateStore, officePort: number, ar
       const sprite = req.method === 'GET' ? /^\/device\/sprite\/(\d+)$/.exec(req.url ?? '') : null;
       if (sprite) {
         const id = Number(sprite[1]);
-        const url = Object.values(resolveSkin().agents).find((a) => a.id === id)?.sprite;
+        // El de un agente o la forma a la que está por evolucionar.
+        const skins = Object.values(resolveSkin().agents);
+        const url = skins.find((a) => a.id === id)?.sprite ?? skins.find((a) => a.evolving?.toId === id)?.evolving?.to;
         const data = url ? await spriteFor(url) : null;
         if (!data) return send(res, 404, { error: 'sprite not found' });
         res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': data.length, 'Cache-Control': 'max-age=86400' });
         return res.end(data);
       }
       if (req.method === 'GET' && req.url === '/device/summary') return send(res, 200, deviceSummary());
+      if (req.method === 'POST' && req.url === '/device/evolved') {
+        // La pantalla ya mostró la evolución: el agente pasa a su nueva forma.
+        let body: { id?: unknown; stage?: unknown } = {};
+        try {
+          body = JSON.parse(await readBody(req)) as typeof body;
+        } catch {
+          /* cuerpo no válido */
+        }
+        const name = typeof body.id === 'number' ? (store.get(body.id)?.directoryName ?? directoryForDeviceId(body.id)) : null;
+        if (!name || typeof body.stage !== 'number' || !Number.isInteger(body.stage) || body.stage < 1 || body.stage > 3) return send(res, 400, { error: 'bad request' });
+        // Solo confirma una evolución que de verdad está pendiente.
+        if (resolveSkin().agents[name]?.evolving?.stage !== body.stage) return send(res, 409, { error: 'no pending evolution' });
+        markEvolved(name, body.stage);
+        return send(res, 200, { ok: true });
+      }
       if (req.method === 'POST' && req.url === '/device/open') {
         let id: unknown;
         try {

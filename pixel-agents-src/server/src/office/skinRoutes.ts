@@ -96,7 +96,7 @@ export interface AgentSkin {
   evolvesAt: number | null;
   /** Prompts (y días) que faltan para la próxima evolución; null si ya no evoluciona. */
   toNext: ToNext | null;
-  evolving?: { fromName: string; from: string; toName: string; to: string; stage: number };
+  evolving?: { fromName: string; from: string; toName: string; to: string; toId: number; stage: number };
 }
 
 const skinFile = (): string => path.join(officeDir(), 'skin.json');
@@ -341,12 +341,19 @@ export function resolveSkin(): {
       evolvesAt: nextLevel ?? null,
       toNext: toNextLevel(xp, nextLevel),
       ...(stage > seen
-        ? { evolving: { fromName: data.evo[id].name, from: url(id, 'idle'), toName: data.evo[path[seen + 1]].name, to: url(path[seen + 1], 'idle'), stage: seen + 1 } }
+        ? { evolving: { fromName: data.evo[id].name, from: url(id, 'idle'), toName: data.evo[path[seen + 1]].name, to: url(path[seen + 1], 'idle'), toId: path[seen + 1], stage: seen + 1 } }
         : {}),
     };
   }
   if (changed) writeSkin(skin);
   return { theme: skin.theme, types, rooms, agents, ranks };
+}
+
+/** La evolución ya se mostró (en la oficina o en la pantalla externa): el agente pasa a esa forma. */
+export function markEvolved(agent: string, stage: number): void {
+  const skin = readSkin();
+  skin.seen[agent] = Math.max(skin.seen[agent] ?? 0, stage);
+  writeSkin(skin);
 }
 
 export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOptions): void {
@@ -355,9 +362,7 @@ export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOpti
   app.post<{ Body: { agent?: string; stage?: number } }>('/api/skin/evolved', { preHandler: bearerAuth(options.token) }, async (request, reply) => {
     const { agent, stage } = request.body ?? {};
     if (!agent || typeof stage !== 'number') return reply.code(400).send({ error: 'falta agent o stage' });
-    const skin = readSkin();
-    skin.seen[agent] = Math.max(skin.seen[agent] ?? 0, stage);
-    writeSkin(skin);
+    markEvolved(agent, stage);
     return reply.send(resolveSkin());
   });
   // La animación de ascenso ya se mostró.
