@@ -411,18 +411,6 @@
      "name": "Wall Shadow",
      "slug": "wallshadow",
      "gen": 1
-    },
-    {
-     "id": 1071,
-     "name": "Jirai Gumo",
-     "slug": "jiraigumo",
-     "gen": 1
-    },
-    {
-     "id": 1072,
-     "name": "Dungeon Worm",
-     "slug": "dungeonworm",
-     "gen": 1
     }
    ]
   },
@@ -974,18 +962,6 @@
   "1070": {
    "name": "Exodia the Forbidden One",
    "slug": "exodia",
-   "gen": 1,
-   "next": []
-  },
-  "1071": {
-   "name": "Jirai Gumo",
-   "slug": "jiraigumo",
-   "gen": 1,
-   "next": []
-  },
-  "1072": {
-   "name": "Dungeon Worm",
-   "slug": "dungeonworm",
    "gen": 1,
    "next": []
   }
