@@ -52,12 +52,15 @@ def aplicar_skin(of):
     scripts/pokemon.json). Guarda los valores originales en *_base y los restaura con el
     tema clásico. Devuelve una descripción de lo que cambió o None."""
     skin = load(os.path.join(DATA, "skin.json"), {"theme": "classic", "rooms": {}})
-    data = load(os.path.join(OFI, "pokemon.json"), None)
+    tema = skin.get("theme")
+    # Yu-Gi-Oh lleva su propio reparto (skin.json -> yugioh) y sus datos (yugioh.json).
+    data = load(os.path.join(OFI, "yugioh.json" if tema == "yugioh" else "pokemon.json"), None)
+    salas_tipo = (skin.get("yugioh") or {}).get("rooms", {}) if tema == "yugioh" else skin.get("rooms", {})
     cambios = []
-    if skin.get("theme") == "pokemon" and data:
+    if tema in ("pokemon", "yugioh") and data:
         orden, tipos = data["order"], data["types"]
         for i, s in enumerate(of.get("salas", [])):
-            t = skin.get("rooms", {}).get(s["label"])
+            t = salas_tipo.get(s["label"])
             t = t if t in tipos else orden[i % len(orden)]
             info = tipos[t]
             s.setdefault("color_base", s["color"]); s.setdefault("tileColor_base", dict(s["tileColor"]))

@@ -275,7 +275,7 @@ export function AgentCard({
 
   // Tema Pokémon: la ficha muestra el sprite (GIF animado) del Pokémon del agente en vez del muñeco.
   const skin = useSkin();
-  const pk = skin.theme === 'pokemon' && name ? skin.agents[name] : undefined;
+  const pk = skin.theme !== 'classic' && name ? skin.agents[name] : undefined;
   const working = status === 'working';
   // Terminó un turno y aún no lo has visto: se muestra como "te necesita".
   const effStatus: TabStatus | null = unseen && status === 'idle' ? 'question' : status;

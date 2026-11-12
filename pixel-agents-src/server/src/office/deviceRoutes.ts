@@ -306,7 +306,7 @@ export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTr
   let pokemon: Record<string, AgentSkin> = {};
   try {
     const skin = resolveSkin();
-    if (skin.theme === 'pokemon') pokemon = skin.agents;
+    if (skin.theme !== 'classic') pokemon = skin.agents;
   } catch {
     /* sin skin */
   }

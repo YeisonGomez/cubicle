@@ -7,7 +7,7 @@ const XP_SEGMENTS = 10;
 export function AgentLevel({ name }: { name: string }) {
   const { t } = useT();
   const skin = useSkin();
-  const pokemon = skin.theme === 'pokemon' ? skin.agents[name] : undefined;
+  const pokemon = skin.theme !== 'classic' ? skin.agents[name] : undefined;
   const rank = skin.theme === 'classic' ? skin.ranks?.[name] : undefined;
   const a = pokemon ?? rank;
   if (!a || a.level === undefined) return null; // servidor aún sin reiniciar

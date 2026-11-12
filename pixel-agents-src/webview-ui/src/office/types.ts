@@ -214,7 +214,7 @@ export interface Character {
   /** Descansando en el sofá: no pasea ni se levanta hasta que despierte. */
   resting?: boolean;
   /** Skin alternativo (tema Pokémon): imagen que sustituye al muñeco y su nombre. */
-  skin?: { url: string; walk: string; name: string } | null;
+  skin?: { url: string; walk: string; name: string; still?: boolean; fly?: boolean } | null;
   /** Countdown timer for bubble (waiting: 2→0, permission: unused) */
   bubbleTimer: number;
   /** Timer to stay seated while inactive after seat reassignment (counts down to 0) */

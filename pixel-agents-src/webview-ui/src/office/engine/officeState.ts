@@ -1170,7 +1170,7 @@ export class OfficeState {
   }
 
   /** Skin de un personaje (tema Pokémon) o null para el muñeco clásico. */
-  setSkin(id: number, skin: { url: string; walk: string; name: string } | null): void {
+  setSkin(id: number, skin: { url: string; walk: string; name: string; still?: boolean; fly?: boolean } | null): void {
     const ch = this.characters.get(id);
     if (ch) ch.skin = skin;
   }

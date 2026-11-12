@@ -5,8 +5,8 @@ import { loadSkin, updateSkin, useSkin } from '../skin.js';
 import { Segmented } from './ui/Segmented.js';
 
 /**
- * Elección del skin de los personajes: Clásico o Pokémon. Con Pokémon, cada sala
- * es un tipo (se puede cambiar) y "Volver a sortear" reparte Pokémon nuevos.
+ * Elección del skin de los personajes: Clásico, Pokémon o Yu-Gi-Oh. Con los dos últimos, cada sala
+ * es un tipo o atributo (se puede cambiar) y "Volver a sortear" reparte Pokémon nuevos.
  * `compact` (primer arranque): solo los dos botones.
  */
 export function SkinPicker({ compact = false }: { compact?: boolean }) {
@@ -37,6 +37,7 @@ export function SkinPicker({ compact = false }: { compact?: boolean }) {
       options={[
         { id: 'classic', label: t('skin.classic') },
         { id: 'pokemon', label: t('skin.pokemon') },
+        { id: 'yugioh', label: t('skin.yugioh') },
       ]}
       onChange={(id) => void run({ theme: id })}
     />
@@ -55,9 +56,9 @@ export function SkinPicker({ compact = false }: { compact?: boolean }) {
         <span className="text-text-muted">{t('skin.title')}</span>
         {buttons}
       </div>
-      {skin.theme === 'pokemon' && (
+      {skin.theme !== 'classic' && (
         <div className="flex flex-col gap-6 pl-4">
-          <span className="text-text-muted text-sm leading-relaxed">{t('skin.help')}</span>
+          <span className="text-text-muted text-sm leading-relaxed">{t(skin.theme === 'yugioh' ? 'skin.helpYugioh' : 'skin.help')}</span>
           {Object.entries(skin.rooms).map(([label, type]) => (
             <label key={label} className="flex items-center justify-between gap-12 py-2">
               <span className="truncate">{label}</span>
@@ -72,13 +73,13 @@ export function SkinPicker({ compact = false }: { compact?: boolean }) {
           ))}
           <div className="flex items-center gap-10 mt-2">
             <button className="text-accent-bright hover:underline underline-offset-4 disabled:opacity-40" disabled={busy} onClick={() => void run({ reshuffle: 'all' })}>
-              {t('skin.reshuffle')}
+              {t(skin.theme === 'yugioh' ? 'skin.reshuffleYugioh' : 'skin.reshuffle')}
             </button>
             {msg && <span className="text-text-muted text-sm">{msg}</span>}
           </div>
         </div>
       )}
-      {skin.theme !== 'pokemon' && msg && <span className="text-text-muted text-sm">{msg}</span>}
+      {skin.theme === 'classic' && msg && <span className="text-text-muted text-sm">{msg}</span>}
     </div>
   );
 }

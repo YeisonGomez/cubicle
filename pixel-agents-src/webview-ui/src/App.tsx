@@ -398,8 +398,8 @@ function App() {
     let missing = false;
     for (const [id, ch] of os.characters) {
       const a = ch.directoryName ? skin.agents[ch.directoryName] : undefined;
-      os.setSkin(id, skin.theme === 'pokemon' && a ? { url: a.sprite, walk: a.walk, name: a.name } : null);
-      if (skin.theme === 'pokemon' && ch.directoryName && !a && !skinAsked.current.has(ch.directoryName)) {
+      os.setSkin(id, skin.theme !== 'classic' && a ? { url: a.sprite, walk: a.walk, name: a.name, still: a.still, fly: a.fly } : null);
+      if (skin.theme !== 'classic' && ch.directoryName && !a && !skinAsked.current.has(ch.directoryName)) {
         skinAsked.current.add(ch.directoryName);
         missing = true;
       }

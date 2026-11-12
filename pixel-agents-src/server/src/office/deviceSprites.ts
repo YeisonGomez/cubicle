@@ -8,6 +8,7 @@
  * Solo en memoria: los sprites nunca se guardan en disco (© The Pokémon Company).
  */
 import { decompressFrames, parseGIF } from 'gifuct-js';
+import { PNG } from 'pngjs';
 
 /** Magenta puro: el color clave de transparencia (un píxel real con ese color se corre a 0xF81E). */
 export const SPRITE_KEY = 0xf81f;
@@ -79,13 +80,49 @@ export function encodeGif(buf: ArrayBuffer): Buffer | null {
   return out;
 }
 
+/**
+ * Sprite de una sola imagen (PNG, tema Yu-Gi-Oh): se recorta a lo dibujado y, si pasa de
+ * 32 px de lado, se reduce a la mitad para que ocupe lo mismo que un Pokémon en la placa.
+ */
+export function encodePng(buf: ArrayBuffer): Buffer | null {
+  const png = PNG.sync.read(Buffer.from(buf));
+  let x0 = png.width, y0 = png.height, x1 = -1, y1 = -1;
+  for (let y = 0; y < png.height; y++)
+    for (let x = 0; x < png.width; x++)
+      if (png.data[(y * png.width + x) * 4 + 3] >= 128) {
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+      }
+  if (x1 < 0) return null;
+  const step = Math.max(x1 - x0 + 1, y1 - y0 + 1) > 32 ? 2 : 1;
+  const w = Math.ceil((x1 - x0 + 1) / step);
+  const h = Math.ceil((y1 - y0 + 1) / step);
+  if (w > MAX_SIDE || h > MAX_SIDE) return null;
+  const out = Buffer.alloc(5 + 2 + w * h * 2);
+  out.write('CS', 0, 'latin1');
+  out[2] = w;
+  out[3] = h;
+  out[4] = 1;
+  out.writeUInt16LE(500, 5);
+  let o = 7;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const i = ((y0 + y * step) * png.width + x0 + x * step) * 4;
+      out.writeUInt16LE(png.data[i + 3] < 128 ? SPRITE_KEY : rgb565(png.data[i], png.data[i + 1], png.data[i + 2]), o);
+      o += 2;
+    }
+  return out;
+}
+
 /** Sprite codificado de una URL de GIF (cacheado en memoria; null si falla). */
 export function spriteFor(url: string): Promise<Buffer | null> {
   let p = cache.get(url);
   if (!p) {
     p = fetch(url)
       .then((r) => (r.ok ? r.arrayBuffer() : null))
-      .then((b) => (b ? encodeGif(b) : null))
+      .then((b) => (b ? (/\.png(\?|$)/i.test(url) ? encodePng(b) : encodeGif(b)) : null))
       .catch(() => null);
     cache.set(url, p);
     // Un fallo no se queda pegado: se reintenta en la siguiente petición.

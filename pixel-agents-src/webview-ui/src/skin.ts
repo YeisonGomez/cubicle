@@ -26,6 +26,10 @@ export interface AgentSkin {
   evolvesAt: number | null;
   toNext?: ToNext | null;
   evolving?: { fromName: string; from: string; toName: string; to: string; stage: number };
+  /** Sprite de una sola imagen (Yu-Gi-Oh): se anima por código. */
+  still?: boolean;
+  /** Flota en vez de saltar. */
+  fly?: boolean;
 }
 
 /** Progreso del agente en el tema clásico: nivel, experiencia y rango (índice de RANK_KEYS). */
@@ -43,8 +47,10 @@ export interface AgentRank {
 
 export const RANK_KEYS = ['rank.intern', 'rank.junior', 'rank.mid', 'rank.senior', 'rank.lead', 'rank.principal', 'rank.partner'] as const;
 
+export type SkinTheme = 'classic' | 'pokemon' | 'yugioh';
+
 export interface SkinState {
-  theme: 'classic' | 'pokemon';
+  theme: SkinTheme;
   types: Array<{ id: string; es: string; en: string; color: string }>;
   rooms: Record<string, string>;
   agents: Record<string, AgentSkin>;
@@ -75,7 +81,7 @@ export async function loadSkin(): Promise<SkinState> {
   return current;
 }
 
-export async function updateSkin(body: { theme?: 'classic' | 'pokemon'; rooms?: Record<string, string>; reshuffle?: string[] | 'all' }): Promise<SkinState> {
+export async function updateSkin(body: { theme?: SkinTheme; rooms?: Record<string, string>; reshuffle?: string[] | 'all' }): Promise<SkinState> {
   const r = await fetch('./api/skin', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body) });
   const b = (await r.json()) as SkinState & { error?: string };
   if (!r.ok) throw new Error(b.error ?? `HTTP ${r.status}`);

@@ -18,9 +18,10 @@ import { evolutionLevels, levelForXp, MAX_LEVEL, stageForLevel, XP_PER_PROMPT, x
 import { nextRankLevel, rankForLevel } from '../ranks.js';
 import { bearerAuth, runProyecto } from './shared.js';
 
-type Theme = 'classic' | 'pokemon';
+type Theme = 'classic' | 'pokemon' | 'yugioh';
+const DATA_FILE: Record<Theme, string> = { classic: 'pokemon.json', pokemon: 'pokemon.json', yugioh: 'yugioh.json' };
 /** Iniciales de 1.ª y 2.ª generación. */
-const STARTERS = [1, 4, 7, 152, 155, 158];
+const POKEMON_STARTERS = [1, 4, 7, 152, 155, 158];
 /** Sube al cambiar las reglas de asignación: las asignaciones anteriores se rehacen una vez. */
 const ASSIGN_VERSION = 2;
 interface PokeType {
@@ -43,9 +44,25 @@ export interface PokeData {
   sprite: string;
   /** Cadenas de evolución: id -> forma y sus siguientes. */
   evo: Record<string, PokeForm>;
+  /** Sprites de una sola imagen (PNG): la webview los anima por código. */
+  static?: boolean;
+  /** Primeras formas que se reparten al primer agente de cada sala (por defecto, los iniciales de Pokémon). */
+  starters?: number[];
+  /** Formas que flotan en vez de saltar (solo sprites estáticos). */
+  fly?: number[];
+}
+/** Reparto de un tema: tipo de cada sala y personaje de cada agente. */
+export interface Assign {
+  rooms: Record<string, string>;
+  agents: Record<string, number>;
+  paths: Record<string, number[]>;
+  seen: Record<string, number>;
+  assignVersion?: number;
 }
 export interface SkinFile {
   theme: Theme;
+  /** Reparto del tema Yu-Gi-Oh, aparte: cambiar de tema no toca el de Pokémon. */
+  yugioh?: Assign;
   rooms: Record<string, string>;
   /** Pokémon inicial de cada agente (siempre la primera forma de su cadena). */
   agents: Record<string, number>;
@@ -97,13 +114,17 @@ export interface AgentSkin {
   /** Prompts (y días) que faltan para la próxima evolución; null si ya no evoluciona. */
   toNext: ToNext | null;
   evolving?: { fromName: string; from: string; toName: string; to: string; toId: number; stage: number };
+  /** Sprite de una sola imagen: se anima por código (respira, salta al caminar). */
+  still?: boolean;
+  /** Flota en vez de saltar. */
+  fly?: boolean;
 }
 
 const skinFile = (): string => path.join(officeDir(), 'skin.json');
 
-function readData(): PokeData | null {
+function readData(theme: Theme = 'pokemon'): PokeData | null {
   try {
-    return JSON.parse(fs.readFileSync(path.join(scriptsDir(), 'pokemon.json'), 'utf8')) as PokeData;
+    return JSON.parse(fs.readFileSync(path.join(scriptsDir(), DATA_FILE[theme]), 'utf8')) as PokeData;
   } catch {
     return null;
   }
@@ -111,7 +132,7 @@ function readData(): PokeData | null {
 export function readSkin(): SkinFile {
   try {
     const j = JSON.parse(fs.readFileSync(skinFile(), 'utf8')) as Partial<SkinFile>;
-    return { theme: j.theme === 'pokemon' ? 'pokemon' : 'classic', rooms: j.rooms ?? {}, agents: j.agents ?? {}, paths: j.paths ?? {}, seen: j.seen ?? {}, rankSeen: j.rankSeen ?? {}, assignVersion: j.assignVersion };
+    return { theme: j.theme === 'pokemon' || j.theme === 'yugioh' ? j.theme : 'classic', yugioh: j.yugioh, rooms: j.rooms ?? {}, agents: j.agents ?? {}, paths: j.paths ?? {}, seen: j.seen ?? {}, rankSeen: j.rankSeen ?? {}, assignVersion: j.assignVersion };
   } catch {
     return { theme: 'classic', rooms: {}, agents: {}, paths: {}, seen: {}, rankSeen: {} };
   }
@@ -119,6 +140,16 @@ export function readSkin(): SkinFile {
 function writeSkin(s: SkinFile): void {
   fs.mkdirSync(officeDir(), { recursive: true });
   fs.writeFileSync(skinFile(), JSON.stringify(s, null, 2));
+}
+/** Reparto del tema activo (el de Pokémon vive en la raíz del archivo, también con clásico). */
+function assignOf(skin: SkinFile): Assign {
+  if (skin.theme !== 'yugioh') return skin;
+  skin.yugioh ??= { rooms: {}, agents: {}, paths: {}, seen: {} };
+  skin.yugioh.rooms ??= {};
+  skin.yugioh.agents ??= {};
+  skin.yugioh.paths ??= {};
+  skin.yugioh.seen ??= {};
+  return skin.yugioh;
 }
 function roomLabels(): string[] {
   try {
@@ -134,7 +165,7 @@ function roomLabels(): string[] {
  * planta…). Se guarda: si dependiera de la posición, añadir una sala cambiaría las demás.
  * Devuelve si asignó alguno.
  */
-export function freezeRoomTypes(skin: SkinFile, data: PokeData, labels: string[]): boolean {
+export function freezeRoomTypes(skin: Assign, data: PokeData, labels: string[]): boolean {
   let changed = false;
   labels.forEach((label, i) => {
     if (data.types[skin.rooms[label]]) return;
@@ -146,7 +177,7 @@ export function freezeRoomTypes(skin: SkinFile, data: PokeData, labels: string[]
   return changed;
 }
 
-function forget(skin: SkinFile, name: string): void {
+function forget(skin: Assign, name: string): void {
   delete skin.agents[name];
   delete skin.paths[name];
   delete skin.seen[name];
@@ -155,11 +186,14 @@ function forget(skin: SkinFile, name: string): void {
 /** El Pokémon (y su progreso mostrado) acompaña al agente al renombrarlo. */
 export function renameSkinAgent(from: string, to: string): void {
   const skin = readSkin();
-  if (skin.agents[from] !== undefined) skin.agents[to] = skin.agents[from];
-  if (skin.paths[from]) skin.paths[to] = skin.paths[from];
-  if (skin.seen[from] !== undefined) skin.seen[to] = skin.seen[from];
+  for (const st of [skin, skin.yugioh]) {
+    if (!st?.agents) continue;
+    if (st.agents[from] !== undefined) st.agents[to] = st.agents[from];
+    if (st.paths?.[from]) st.paths[to] = st.paths[from];
+    if (st.seen?.[from] !== undefined) st.seen[to] = st.seen[from];
+    forget(st, from);
+  }
   if (skin.rankSeen[from] !== undefined) skin.rankSeen[to] = skin.rankSeen[from];
-  forget(skin, from);
   delete skin.rankSeen[from];
   writeSkin(skin);
 }
@@ -207,7 +241,7 @@ function chainLength(id: number, data: PokeData): number {
  * de su tipo. Devuelve si asignó alguno.
  */
 export function assignPokemon(
-  skin: SkinFile,
+  skin: Assign,
   data: PokeData,
   dirs: Array<{ name: string; room?: string }>,
   rooms: Record<string, string>,
@@ -215,6 +249,7 @@ export function assignPokemon(
   random: () => number = Math.random,
 ): boolean {
   const parents = parentsOf(data);
+  const STARTERS = data.starters ?? POKEMON_STARTERS;
   const stored = (name: string) => (data.evo[skin.agents[name]] ? skin.agents[name] : undefined);
   const used = new Set<number>();
   for (const d of dirs) {
@@ -248,7 +283,9 @@ export function assignPokemon(
     if (stored(d.name)) continue;
     const firsts = typeOf(d.room).pokemon.filter((p) => !parents.has(p.id));
     const others = firsts.filter((p) => !STARTERS.includes(p.id));
-    const pool = others.length > 0 ? others : firsts;
+    // Un tipo sin primeras formas (datos incompletos): cualquiera de las demás.
+    const any = Object.values(data.types).flatMap((t) => t.pokemon.filter((p) => !parents.has(p.id)));
+    const pool = others.length > 0 ? others : firsts.length > 0 ? firsts : any;
     const free = pool.filter((p) => !used.has(p.id));
     const from = free.length > 0 ? free : pool;
     give(d.name, from[Math.floor(random() * from.length)].id);
@@ -264,8 +301,9 @@ export function resolveSkin(): {
   agents: Record<string, AgentSkin>;
   ranks: Record<string, AgentRank>;
 } {
-  const skin = readSkin();
-  const data = readData();
+  const file = readSkin();
+  const data = readData(file.theme);
+  const skin = assignOf(file);
   if (!data) return { theme: 'classic', types: [], rooms: {}, agents: {}, ranks: {} };
   const types = data.order.map((id) => ({ id, es: data.types[id].es, en: data.types[id].en, color: data.types[id].color }));
   const labels = roomLabels();
@@ -319,12 +357,12 @@ export function resolveSkin(): {
       changed = true;
     }
     const rank = rankForLevel(level);
-    const rankSeen = Math.min(skin.rankSeen[d.name] ?? rank, rank);
-    if (skin.rankSeen[d.name] !== rankSeen) {
-      skin.rankSeen[d.name] = rankSeen;
+    const rankSeen = Math.min(file.rankSeen[d.name] ?? rank, rank);
+    if (file.rankSeen[d.name] !== rankSeen) {
+      file.rankSeen[d.name] = rankSeen;
       changed = true;
     }
-    if (skin.theme === 'classic') {
+    if (file.theme === 'classic') {
       ranks[d.name] = { ...progress, rank, nextRankAt: nextRankLevel(rank), toNext: toNextLevel(xp, nextRankLevel(rank)), ...(rank > rankSeen ? { promoted: { rank } } : {}) };
       continue;
     }
@@ -337,6 +375,8 @@ export function resolveSkin(): {
       // Sprites animados (GIF 32x32, 8 fps) del proyecto vscode-pokemon: quieto y caminando.
       sprite: url(id, 'idle'),
       walk: url(id, 'walk'),
+      ...(data.static ? { still: true } : {}),
+      ...(data.fly?.includes(id) ? { fly: true } : {}),
       ...progress,
       evolvesAt: nextLevel ?? null,
       toNext: toNextLevel(xp, nextLevel),
@@ -345,15 +385,16 @@ export function resolveSkin(): {
         : {}),
     };
   }
-  if (changed) writeSkin(skin);
-  return { theme: skin.theme, types, rooms, agents, ranks };
+  if (changed) writeSkin(file);
+  return { theme: file.theme, types, rooms, agents, ranks };
 }
 
 /** La evolución ya se mostró (en la oficina o en la pantalla externa): el agente pasa a esa forma. */
 export function markEvolved(agent: string, stage: number): void {
-  const skin = readSkin();
+  const file = readSkin();
+  const skin = assignOf(file);
   skin.seen[agent] = Math.max(skin.seen[agent] ?? 0, stage);
-  writeSkin(skin);
+  writeSkin(file);
 }
 
 export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOptions): void {
@@ -381,13 +422,14 @@ export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOpti
     { preHandler: bearerAuth(options.token) },
     async (request, reply) => {
       const b = request.body ?? {};
-      const skin = readSkin();
-      const data = readData();
-      if (!data) return reply.code(503).send({ error: 'falta scripts/pokemon.json' });
+      const file = readSkin();
       if (b.theme !== undefined) {
-        if (b.theme !== 'classic' && b.theme !== 'pokemon') return reply.code(400).send({ error: 'theme debe ser classic o pokemon' });
-        skin.theme = b.theme;
+        if (b.theme !== 'classic' && b.theme !== 'pokemon' && b.theme !== 'yugioh') return reply.code(400).send({ error: 'theme debe ser classic, pokemon o yugioh' });
+        file.theme = b.theme;
       }
+      const data = readData(file.theme);
+      if (!data) return reply.code(503).send({ error: `falta scripts/${DATA_FILE[file.theme]}` });
+      const skin = assignOf(file);
       if (b.rooms) {
         for (const [label, type] of Object.entries(b.rooms)) {
           if (!data.types[type]) return reply.code(400).send({ error: `tipo desconocido: ${type}` });
@@ -402,7 +444,7 @@ export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOpti
         skin.paths = {};
         skin.seen = {};
       } else if (Array.isArray(b.reshuffle)) for (const n of b.reshuffle) forget(skin, n);
-      writeSkin(skin);
+      writeSkin(file);
       const out = resolveSkin();
       void runProyecto(options, ['aplicar']).then((r) => {
         if (!r.ok) console.warn('[skin] aplicar falló:', r.log.slice(-400));

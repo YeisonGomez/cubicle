@@ -55,10 +55,43 @@ interface SkinAnim {
   total: number;
   w: number;
   h: number;
+  /** Píxeles de mundo por píxel del sprite (los PNG de 64 px van a 3/4). */
+  scale: number;
 }
 const skinAnims = new Map<string, SkinAnim | null>();
+/** Sprite de una sola imagen (PNG): recortado a lo dibujado para anclarlo por los pies. */
+function loadStillSkin(url: string): void {
+  fetch(url)
+    .then((r) => r.blob())
+    .then((b) => createImageBitmap(b))
+    .then((bmp) => {
+      const full = document.createElement('canvas');
+      full.width = bmp.width;
+      full.height = bmp.height;
+      const fc = full.getContext('2d')!;
+      fc.drawImage(bmp, 0, 0);
+      const px = fc.getImageData(0, 0, full.width, full.height).data;
+      let x0 = full.width, y0 = full.height, x1 = -1, y1 = -1;
+      for (let y = 0; y < full.height; y++)
+        for (let x = 0; x < full.width; x++)
+          if (px[(y * full.width + x) * 4 + 3] >= 128) {
+            x0 = Math.min(x0, x);
+            x1 = Math.max(x1, x);
+            y0 = Math.min(y0, y);
+            y1 = Math.max(y1, y);
+          }
+      if (x1 < 0) return;
+      const cut = document.createElement('canvas');
+      cut.width = x1 - x0 + 1;
+      cut.height = y1 - y0 + 1;
+      cut.getContext('2d')!.drawImage(full, -x0, -y0);
+      skinAnims.set(url, { frames: [cut], ends: [1000], total: 1000, w: cut.width, h: cut.height, scale: STILL_SKIN_SCALE });
+    })
+    .catch(() => skinAnims.set(url, null));
+}
 function loadSkinAnim(url: string): void {
   skinAnims.set(url, null);
+  if (/\.png(\?|$)/i.test(url)) return loadStillSkin(url);
   fetch(url)
     .then((r) => r.arrayBuffer())
     .then((buf) => {
@@ -91,18 +124,18 @@ function loadSkinAnim(url: string): void {
         ends.push(t);
         prev = f;
       }
-      if (out.length > 0) skinAnims.set(url, { frames: out, ends, total: t, w, h });
+      if (out.length > 0) skinAnims.set(url, { frames: out, ends, total: t, w, h, scale: SKIN_SCALE });
     })
     .catch(() => skinAnims.set(url, null));
 }
-function skinFrame(url: string): { img: HTMLCanvasElement; w: number; h: number } | null {
+function skinFrame(url: string): { img: HTMLCanvasElement; w: number; h: number; scale: number } | null {
   if (!skinAnims.has(url)) loadSkinAnim(url);
   const a = skinAnims.get(url);
   if (!a) return null;
   const t = performance.now() % a.total;
   let i = 0;
   while (i < a.ends.length - 1 && t >= a.ends[i]) i++;
-  return { img: a.frames[i], w: a.w, h: a.h };
+  return { img: a.frames[i], w: a.w, h: a.h, scale: a.scale };
 }
 // Silueta blanca de un frame de skin (contorno de selección/hover), cacheada por frame.
 const skinSilhouettes = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
@@ -122,6 +155,8 @@ function skinSilhouette(img: HTMLCanvasElement): HTMLCanvasElement {
 }
 /** El GIF (32 px) se dibuja a tamaño natural en píxeles de mundo (2 tiles): el Pokémon queda algo más bajo que el muñeco. */
 const SKIN_SCALE = 1;
+/** Los sprites estáticos (64 px) se dibujan a 3/4: a la mitad, los pequeños (Kuriboh) casi no se veían. */
+const STILL_SKIN_SCALE = 0.75;
 import { mapOffset } from '../projection.js';
 import {
   getCarpetJunctionSprite,
@@ -522,16 +557,27 @@ export function renderScene(
 
     if (skinFr) {
       // Sprite Pokémon animado: escala entera (nítido), anclado abajo al centro del personaje.
-      const w = skinFr.w * SKIN_SCALE * zoom;
-      const h = skinFr.h * SKIN_SCALE * zoom;
+      const w = Math.round(skinFr.w * skinFr.scale * zoom);
+      let h = Math.round(skinFr.h * skinFr.scale * zoom);
+      let lift = hop;
+      if (ch.skin?.still) {
+        // Una sola imagen: el movimiento lo pone el código. Respira estirándose desde los pies
+        // (más rápido si trabaja), da saltitos al caminar y, si vuela, flota arriba y abajo.
+        const now = performance.now();
+        const phase = ch.id * 1.7;
+        const working = ch.state === CharacterState.TYPE;
+        h = Math.round(h * (1 + 0.04 * Math.sin(now / (working ? 180 : 620) + phase)));
+        if (ch.skin.fly) lift += 2.5 + Math.sin(now / 420 + phase) * 1.5;
+        else if (ch.state === CharacterState.WALK) lift += Math.abs(Math.sin(now / 110 + phase)) * 2;
+      }
       const x = Math.round(offsetX + ch.x * zoom - w / 2);
-      const y = Math.round(offsetY + (ch.y + sittingOffset - hop) * zoom - h);
+      const y = Math.round(offsetY + (ch.y + sittingOffset - lift) * zoom - h);
       const flip = ch.dir === Direction.LEFT;
       const img = skinFr.img;
       if (isSelected || isHovered) {
         // Contorno del Pokémon (no del muñeco): silueta blanca desplazada 1 px de sprite en 4 direcciones.
         const sil = skinSilhouette(img);
-        const d = Math.max(1, Math.round(SKIN_SCALE * zoom));
+        const d = Math.max(1, Math.round(zoom));
         const outlineAlpha = isSelected ? SELECTED_OUTLINE_ALPHA : HOVERED_OUTLINE_ALPHA;
         drawables.push({
           zY: charZY - OUTLINE_Z_SORT_OFFSET,
