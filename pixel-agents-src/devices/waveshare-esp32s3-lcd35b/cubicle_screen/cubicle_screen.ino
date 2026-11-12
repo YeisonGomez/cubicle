@@ -992,30 +992,33 @@ void drawCard(int slot, int idx) {
     }
     return;
   }
-  drawAvatar(a, cx, y + 96, vScale);
-  if (a.level > 0) {
-    // Nivel y prompts que faltan en las esquinas de arriba; la barra, entre el Pokémon y el nombre.
-    gfx->setFont(F_SMALL);
+  drawAvatar(a, cx, y + 93, vScale);
+  gfx->setFont(F_NAME);
+  gfx->setTextColor(C_TEXT);
+  printCentered(fitText(a.name, w - 8), cx, y + h - 23);
+  gfx->setFont(F_SMALL);
+  if (a.level > 0 && a.status == 'i') {
+    // Libre: la línea de estado deja su sitio al nivel y a los prompts que faltan
+    // (arriba los tapaba el Pokémon); el punto gris sigue diciendo que está libre.
+    gfx->fillCircle(x + 10, y + h - 14, 3, sc);
     gfx->setTextColor(C_MUTED);
-    gfx->setCursor(x + 6, y + 20);
+    gfx->setCursor(x + 17, y + h - 10);
     gfx->print(String(T("Nv ", "Lv ")) + String(a.level));
     if (a.left > 0) {
       String left = String(T("faltan ", "")) + String(a.left) + T("", " left");
-      gfx->setCursor(x + w - 6 - textWidth(left), y + 20);
+      if (textWidth(left) > w - 60) left = String(a.left);
+      gfx->setCursor(x + w - 7 - textWidth(left), y + h - 10);
       gfx->print(left);
     }
-    drawXpBar(x + 8, y + 96, w - 16, 3, a.xp);
+  } else {
+    gfx->setTextColor(sc);
+    if (time.length() && textWidth(label + " · " + time) + 12 <= w - 8) label += " · " + time;
+    int lw = textWidth(label) + 12;
+    gfx->fillCircle(cx - lw / 2 + 3, y + h - 14, 3, sc);
+    gfx->setCursor(cx - lw / 2 + 12, y + h - 10);
+    gfx->print(label);
   }
-  gfx->setFont(F_NAME);
-  gfx->setTextColor(C_TEXT);
-  printCentered(fitText(a.name, w - 8), cx, y + h - 20);
-  gfx->setFont(F_SMALL);
-  gfx->setTextColor(sc);
-  if (time.length() && textWidth(label + " · " + time) + 12 <= w - 8) label += " · " + time;
-  int lw = textWidth(label) + 12;
-  gfx->fillCircle(cx - lw / 2 + 3, y + h - 10, 3, sc);
-  gfx->setCursor(cx - lw / 2 + 12, y + h - 6);
-  gfx->print(label);
+  if (a.level > 0) drawXpBar(x + 8, y + h - 7, w - 16, 3, a.xp);
 }
 
 /** Barra de consumo con su título y porcentaje. */
