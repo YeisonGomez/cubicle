@@ -39,6 +39,7 @@ Los textos salen en el idioma de la oficina (ES/EN).
 ## Uso
 
 - Tocar una ficha → se abre el agente en el computador. El agente seleccionado en la oficina sale con borde morado y la pantalla pasa a su diapositiva.
+- Con las sesiones en la app de Claude (Ajustes de Cubicle → "Sesiones en"), tocar una ficha abre esa conversación en la app y salen todos los agentes, también los que no están trabajando.
 - Estados: Trabajando (azul), Pide permiso y Te necesita (amarillo: terminó o pregunta y aún no lo has mirado), Libre (gris).
 - Franjas con flecha a los lados (o deslizar) → diapositiva siguiente o anterior. Hasta 8 agentes por diapositiva, agrupados por sala (de la más usada a la menos en los últimos 30 días); una sala no se parte entre diapositivas si cabe en una.
 - Gira sola si está claramente de pie (acelerómetro QMI8658: horizontal al derecho o al revés). Tumbada, usa el giro elegido a mano: toque corto en BOOT o `http://cubicle-pantalla.local/rotate` (se guarda).

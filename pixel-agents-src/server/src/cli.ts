@@ -36,6 +36,7 @@ import {
 import { FileStateAdapter } from './fileStateAdapter.js';
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
 import { PixelAgentsServer } from './server.js';
+import { getSessionHost } from './office/sessionHost.js';
 import { relaunchAll, rememberSessions } from './terminal/relaunch.js';
 import { PtySessionManager } from './terminal/ptySessionManager.js';
 import { isLoopbackHost, normalizeHostname } from './wsAuth.js';
@@ -367,7 +368,8 @@ async function main(): Promise<void> {
       setInterval(() => rememberSessions({ store, ptyManager }), 30_000).unref();
     }
 
-    if (args.relaunch && args.terminal) {
+    // Con las sesiones en la app de Claude (Ajustes), Cubicle no abre terminales: solo observa.
+    if (args.relaunch && args.terminal && getSessionHost() === 'cubicle') {
       // Unos segundos después del arranque, cuando hooks y assets ya quedaron listos.
       setTimeout(() => {
         void relaunchAll(

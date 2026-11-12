@@ -8,6 +8,7 @@ import { Button } from './ui/Button.js';
 import { Checkbox } from './ui/Checkbox.js';
 import { MenuItem } from './ui/MenuItem.js';
 import { Modal } from './ui/Modal.js';
+import { SessionHostPicker } from './SessionHostPicker.js';
 import { SkinPicker } from './SkinPicker.js';
 
 interface SettingsModalProps {
@@ -93,6 +94,8 @@ export function SettingsModal({
       </div>
       {/* Skin de los personajes (clásico / Pokémon), guardado en el servidor. */}
       <SkinPicker />
+      {/* Sesiones en las terminales de Cubicle o en la app de Claude. */}
+      {isBrowserRuntime && <SessionHostPicker />}
       {/* Open Sessions Folder opens an OS file manager — impossible in the browser. */}
       {onImportSessions && (
         <MenuItem

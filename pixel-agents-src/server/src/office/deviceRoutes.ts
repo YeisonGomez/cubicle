@@ -11,6 +11,7 @@
  *   GET  /device/sprite/:n       → sprite animado del Pokémon n, listo para dibujar (deviceSprites.ts)
  *   GET  /device/summary      → hora, idioma, prompts de hoy y consumo de la semana y de Fable (reposo)
  *   POST /device/open  {"id": n} → la webview abre ese agente y el navegador pasa al frente
+ *                                  (con las sesiones en la app de Claude: se abre allí, sessionHost.ts)
  *
  * "Te necesita" (terminó o pregunta y aún no lo has mirado) lo decide la webview: lo
  * sube con PUT /api/device/attention (servidor de la oficina, con token) y aquí se marca.
@@ -29,6 +30,7 @@ import type { HttpServerOptions } from '../httpServer.js';
 import { activityFile, officeDir } from '../officePaths.js';
 import { spriteFor } from './deviceSprites.js';
 import { getOfficeLang } from './language.js';
+import { getSessionHost, openInClaudeApp, sessionIdFor } from './sessionHost.js';
 import { bearerAuth } from './shared.js';
 import { resolveSkin } from './skinRoutes.js';
 import { accountUsage } from './statsRoutes.js';
@@ -248,7 +250,19 @@ export function sortByUsage<T extends { name: string; room: string }>(list: T[],
   );
 }
 
-/** Agentes con nombre (uno por Directorio: el de id más bajo), agrupados por sala y ordenados por uso. */
+/** Con las sesiones en la app de Claude, cada Directorio tiene un id fijo en la pantalla (base + su posición). */
+const APP_ID_BASE = 100_000;
+
+/** Nombre del Directorio de un id de pantalla en modo app, o null. */
+export function directoryForDeviceId(id: number): string | null {
+  return readConfig().directories[id - APP_ID_BASE]?.name ?? null;
+}
+
+/**
+ * Agentes con nombre (uno por Directorio: el de id más bajo), agrupados por sala y ordenados por uso.
+ * Con las sesiones en la app de Claude salen TODOS los Directorios, con id fijo: una sesión de la app
+ * solo existe para la oficina mientras trabaja, y la pantalla debe poder abrir también las quietas.
+ */
 export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTracker, areaOf: (name: string) => string | undefined): DeviceAgent[] {
   const colors = rooms();
   let pokemon: Record<string, { name: string; id: number }> = {};
@@ -258,14 +272,28 @@ export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTr
   } catch {
     /* sin skin */
   }
-  const byName = new Map<string, DeviceAgent>();
+  const live = new Map<string, number>();
   for (const a of store.values()) {
     const name = a.directoryName;
-    if (!name || (byName.get(name)?.id ?? Infinity) < a.id) continue;
-    const room = areaOf(name) ?? '';
-    byName.set(name, { id: a.id, name, room, color: colors.get(room) ?? ROOM_COLOR_FALLBACK, status: effectiveStatus(tracker.get(a.id), a.id), since: tracker.since(a.id), ...(pokemon[name] ? { pokemon: pokemon[name].name, sprite: pokemon[name].id } : {}), ...(a.id === selectedId ? { selected: true } : {}) });
+    if (name && (live.get(name) ?? Infinity) > a.id) live.set(name, a.id);
   }
-  return sortByUsage([...byName.values()], usageByAgent());
+  const inApp = getSessionHost() === 'claude-app';
+  const names = inApp ? readConfig().directories.map((d, i) => ({ name: d.name, id: APP_ID_BASE + i })) : [...live].map(([name, id]) => ({ name, id }));
+  const list = names.map(({ name, id }): DeviceAgent => {
+    const liveId = live.get(name);
+    const room = areaOf(name) ?? '';
+    return {
+      id,
+      name,
+      room,
+      color: colors.get(room) ?? ROOM_COLOR_FALLBACK,
+      status: liveId === undefined ? 'idle' : effectiveStatus(tracker.get(liveId), liveId),
+      since: tracker.since(liveId ?? id),
+      ...(pokemon[name] ? { pokemon: pokemon[name].name, sprite: pokemon[name].id } : {}),
+      ...(liveId !== undefined && liveId === selectedId ? { selected: true } : {}),
+    };
+  });
+  return sortByUsage(list, usageByAgent());
 }
 
 /** macOS: pone al frente la pestaña de Cubicle en Chrome (o lo abre en el navegador). */
@@ -342,6 +370,13 @@ export function startDeviceServer(store: AgentStateStore, officePort: number, ar
           id = (JSON.parse(await readBody(req)) as { id?: unknown }).id;
         } catch {
           id = undefined;
+        }
+        if (typeof id === 'number' && getSessionHost() === 'claude-app') {
+          // Sesiones en la app de Claude: abrir el agente = abrir su conversación allí.
+          const name = directoryForDeviceId(id) ?? store.get(id)?.directoryName;
+          const sessionId = name ? sessionIdFor(store, name) : null;
+          if (!sessionId || !openInClaudeApp(sessionId)) return send(res, 404, { error: 'agent not found' });
+          return send(res, 200, { ok: true });
         }
         if (typeof id !== 'number' || !store.has(id)) return send(res, 404, { error: 'agent not found' });
         store.broadcast({ type: 'deviceOpenAgent', id });
