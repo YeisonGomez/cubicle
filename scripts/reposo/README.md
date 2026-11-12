@@ -16,3 +16,7 @@ Sin imágenes en ninguna de las dos, el reposo sale con su diseño de siempre (c
 - Cada 10 minutos toca otra, en vueltas barajadas (todas salen una vez antes de repetir).
 - Un toque en la vista de reposo, fuera de la franja de arriba, pasa a la siguiente.
 - No hace falta reiniciar nada al añadir o quitar imágenes.
+
+## Sobre las imágenes de `yugioh/`
+
+Las imágenes de `scripts/reposo/yugioh/` son ilustraciones de Yu-Gi-Oh! (© Kazuki Takahashi / Konami) y arte de fans; pertenecen a sus autores. Se incluyen solo como ejemplo para la pantalla y **no están cubiertas por la licencia MIT** de este repositorio. Si eres el autor de alguna y quieres que se retire, abre un issue.
