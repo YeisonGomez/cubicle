@@ -1098,7 +1098,7 @@ void drawRest() {
   const bool art = restBg != nullptr;
   if (art) gfx->draw16bitRGBBitmap(0, 0, restBg, W, H);
   else gfx->fillScreen(C_BG);
-  const int cx = art ? 150 : W / 2;
+  const int cx = art ? 130 : W / 2;
   uint32_t t = nowLocal();
   char clock[8] = "--:--";
   if (t) snprintf(clock, sizeof(clock), "%02lu:%02lu", (unsigned long)((t % 86400) / 3600), (unsigned long)((t % 3600) / 60));
@@ -1116,7 +1116,7 @@ void drawRest() {
   }
   if (art) {
     // Panel oscuro bajo las cifras: las barras se distinguen del fondo aunque tenga estrellas.
-    const int px = 20, pw = 260, py = 134, ph = 152;
+    const int px = 14, pw = 232, py = 134, ph = 152;
     gfx->fillRoundRect(px, py, pw, ph, 10, C_BG);
     gfx->drawRoundRect(px, py, pw, ph, 10, C_CARD_HI);
     gfx->setFont(F_NAME);
