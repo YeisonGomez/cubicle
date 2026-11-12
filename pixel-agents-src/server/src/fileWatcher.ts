@@ -1397,6 +1397,8 @@ export function scanExternalDir(
       waitingTimers,
       permissionTimers,
       persistAgents,
+      // Cubicle: con el nombre del Directorio registrado (sin él, la sesión no se asocia a su agente).
+      directoryNameResolver?.({ projectDir }),
     );
   }
 }
