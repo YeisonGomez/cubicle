@@ -50,4 +50,17 @@ describe('pantalla externa', () => {
     expect(effectiveStatus('working', 1, pending)).toBe('working');
     expect(effectiveStatus('permission', 1, pending)).toBe('permission');
   });
+
+  it('pendiente de atender: al terminar un turno, hasta que vuelve a trabajar o se abre desde la pantalla', () => {
+    const t = new DeviceStatusTracker();
+    expect(t.isPending(1)).toBe(false);
+    t.onMessage({ type: 'agentStatus', id: 1, status: 'active' });
+    t.onMessage({ type: 'agentStatus', id: 1, status: 'waiting' });
+    t.onMessage({ type: 'agentStatus', id: 2, status: 'active' });
+    t.onMessage({ type: 'agentStatus', id: 2, status: 'waiting' });
+    expect([t.isPending(1), t.isPending(2)]).toEqual([true, true]);
+    t.attended(1);
+    t.onMessage({ type: 'agentStatus', id: 2, status: 'active' });
+    expect([t.isPending(1), t.isPending(2)]).toEqual([false, false]);
+  });
 });

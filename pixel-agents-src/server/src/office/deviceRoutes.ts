@@ -124,9 +124,14 @@ export class DeviceStatusTracker {
   private readonly statuses = new Map<number, DeviceStatus>();
   private readonly sinceMs = new Map<number, number>();
   private readonly startedAt = Date.now();
+  /** Terminaron un turno y nadie los ha atendido aún (ver `isPending`). */
+  private readonly pending = new Set<number>();
 
   private set(id: number, status: DeviceStatus): void {
     if (this.statuses.get(id) === status) return;
+    const before = this.statuses.get(id);
+    if (status === 'idle' && (before === 'working' || before === 'permission')) this.pending.add(id);
+    else if (status !== 'idle') this.pending.delete(id);
     this.statuses.set(id, status);
     this.sinceMs.set(id, Date.now());
   }
@@ -156,12 +161,26 @@ export class DeviceStatusTracker {
       case 'agentClosed':
         this.statuses.delete(id);
         this.sinceMs.delete(id);
+        this.pending.delete(id);
         break;
     }
   }
 
   get(id: number): DeviceStatus {
     return this.statuses.get(id) ?? 'idle';
+  }
+
+  /**
+   * Terminó y sigue sin atender: lo está hasta que vuelve a trabajar (le escribiste) o se abre
+   * desde la pantalla. Con las sesiones en la app de Claude la webview no sabe qué has mirado,
+   * así que "Te necesita" sale de aquí.
+   */
+  isPending(id: number): boolean {
+    return this.pending.has(id);
+  }
+
+  attended(id: number): void {
+    this.pending.delete(id);
   }
 }
 
@@ -287,7 +306,7 @@ export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTr
       name,
       room,
       color: colors.get(room) ?? ROOM_COLOR_FALLBACK,
-      status: liveId === undefined ? 'idle' : effectiveStatus(tracker.get(liveId), liveId),
+      status: liveId === undefined ? 'idle' : effectiveStatus(tracker.get(liveId), liveId, inApp && tracker.isPending(liveId) ? new Set([...attention, liveId]) : attention),
       since: tracker.since(liveId ?? id),
       ...(pokemon[name] ? { pokemon: pokemon[name].name, sprite: pokemon[name].id } : {}),
       ...(liveId !== undefined && liveId === selectedId ? { selected: true } : {}),
@@ -376,6 +395,7 @@ export function startDeviceServer(store: AgentStateStore, officePort: number, ar
           const name = directoryForDeviceId(id) ?? store.get(id)?.directoryName;
           const sessionId = name ? sessionIdFor(store, name) : null;
           if (!sessionId || !openInClaudeApp(sessionId)) return send(res, 404, { error: 'agent not found' });
+          for (const a of store.values()) if (a.directoryName === name) tracker.attended(a.id);
           return send(res, 200, { ok: true });
         }
         if (typeof id !== 'number' || !store.has(id)) return send(res, 404, { error: 'agent not found' });
