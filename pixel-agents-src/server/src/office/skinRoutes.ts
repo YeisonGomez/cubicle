@@ -104,6 +104,8 @@ export function toNextLevel(xp: number, level: number | null | undefined, prompt
 }
 export interface AgentSkin {
   type: string;
+  /** Sala del agente (para agruparlo en el mapa de personajes). */
+  room?: string;
   id: number;
   name: string;
   sprite: string;
@@ -328,6 +330,47 @@ export function assignPokemon(
   return changed;
 }
 
+function spriteUrl(data: PokeData, id: number, anim: string): string {
+  const f = data.evo[id];
+  if (f?.local) return `${CUSTOM_SPRITE_URL}${f.slug}.png`;
+  return data.sprite.replace('{gen}', String(f?.gen ?? 1)).replace('{slug}', f?.slug ?? '').replace('{anim}', anim);
+}
+
+export interface SkinCatalog {
+  theme: Theme;
+  groups: Array<{ id: string; es: string; en: string; color: string; chains: Array<Array<{ id: number; name: string; sprite: string }>> }>;
+}
+
+/**
+ * Todos los personajes del tema activo, por grupo (tipo o baraja) y por cadena de evolución:
+ * el mapa donde el usuario elige el de cada agente. Vacío con el tema clásico.
+ */
+export function skinCatalog(): SkinCatalog {
+  const theme = readSkin().theme;
+  const data = theme === 'classic' ? null : readData(theme);
+  if (!data) return { theme, groups: [] };
+  const parents = parentsOf(data);
+  const form = (id: number) => ({ id, name: data.evo[id].name, sprite: spriteUrl(data, id, 'idle') });
+  // Cada cadena se pinta entera desde su primera forma; una rama (Eevee) sale como varias filas.
+  const rows = (id: number, sofar: number[]): number[][] => {
+    const next = (data.evo[id]?.next ?? []).filter((n) => data.evo[n]);
+    const here = [...sofar, id];
+    return next.length === 0 ? [here] : next.flatMap((n) => rows(n, here));
+  };
+  const seen = new Set<number>();
+  const groups = data.order.map((t) => {
+    const chains: SkinCatalog['groups'][number]['chains'] = [];
+    for (const p of data.types[t].pokemon) {
+      const root = rootOf(p.id, parents);
+      if (seen.has(root) || !data.evo[root]) continue;
+      seen.add(root);
+      for (const row of rows(root, [])) chains.push(row.map(form));
+    }
+    return { id: t, es: data.types[t].es, en: data.types[t].en, color: data.types[t].color, chains };
+  });
+  return { theme, groups };
+}
+
 /** Estado resuelto para la webview y Ajustes. Asigna (y guarda) lo que falte. */
 export function resolveSkin(): {
   theme: Theme;
@@ -361,11 +404,7 @@ export function resolveSkin(): {
   const ranks: Record<string, AgentRank> = {};
   const parents = parentsOf(data);
   const prompts = promptDaysByAgent(cfg.directories, activityFile());
-  const url = (id: number, anim: string) => {
-    const f = data.evo[id];
-    if (f?.local) return `${CUSTOM_SPRITE_URL}${f.slug}.png`;
-    return data.sprite.replace('{gen}', String(f?.gen ?? 1)).replace('{slug}', f?.slug ?? '').replace('{anim}', anim);
-  };
+  const url = (id: number, anim: string) => spriteUrl(data, id, anim);
   for (const d of dirs) {
     const type = (d.room && rooms[d.room]) || data.order[0];
     const list = data.types[type].pokemon;
@@ -409,6 +448,7 @@ export function resolveSkin(): {
     const nextLevel = evoAt[seen];
     agents[d.name] = {
       type,
+      ...(d.room ? { room: d.room } : {}),
       id,
       name: data.evo[id].name,
       // Sprites animados (GIF 32x32, 8 fps) del proyecto vscode-pokemon: quieto y caminando.
@@ -438,6 +478,7 @@ export function markEvolved(agent: string, stage: number): void {
 
 export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOptions): void {
   app.get('/api/skin', async () => resolveSkin());
+  app.get('/api/skin/catalog', async () => skinCatalog());
   // Sprite propio del usuario. Sin token: lo carga un <img>, igual que GET /api/skin.
   app.get<{ Params: { file: string } }>('/api/skin/sprite/:file', async (request, reply) => {
     const file = request.params.file;

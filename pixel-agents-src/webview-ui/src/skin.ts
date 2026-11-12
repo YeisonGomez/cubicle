@@ -14,6 +14,7 @@ export interface ToNext {
 
 export interface AgentSkin {
   type: string;
+  room?: string;
   id: number;
   name: string;
   sprite: string;
@@ -81,13 +82,24 @@ export async function loadSkin(): Promise<SkinState> {
   return current;
 }
 
-export async function updateSkin(body: { theme?: SkinTheme; rooms?: Record<string, string>; reshuffle?: string[] | 'all' }): Promise<SkinState> {
+export async function updateSkin(body: { theme?: SkinTheme; rooms?: Record<string, string>; reshuffle?: string[] | 'all'; assign?: Record<string, number> }): Promise<SkinState> {
   const r = await fetch('./api/skin', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body) });
   const b = (await r.json()) as SkinState & { error?: string };
   if (!r.ok) throw new Error(b.error ?? `HTTP ${r.status}`);
   current = b;
   emit();
   return current;
+}
+
+/** Todos los personajes del tema activo, por grupo y cadena de evolución (mapa para elegir). */
+export interface SkinCatalog {
+  theme: SkinTheme;
+  groups: Array<{ id: string; es: string; en: string; color: string; chains: Array<Array<{ id: number; name: string; sprite: string }>> }>;
+}
+export async function loadSkinCatalog(): Promise<SkinCatalog> {
+  const r = await fetch('./api/skin/catalog', { cache: 'no-store' });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return (await r.json()) as SkinCatalog;
 }
 
 /** La animación de evolución ya se mostró: el agente pasa a su nueva forma. */

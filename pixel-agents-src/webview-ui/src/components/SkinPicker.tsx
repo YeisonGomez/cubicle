@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { useT } from '../i18n/index.js';
 import { loadSkin, updateSkin, useSkin } from '../skin.js';
+import { SkinRoster } from './SkinRoster.js';
 import { Segmented } from './ui/Segmented.js';
 
 /**
@@ -14,6 +15,7 @@ export function SkinPicker({ compact = false }: { compact?: boolean }) {
   const skin = useSkin();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [roster, setRoster] = useState(false);
   useEffect(() => {
     void loadSkin();
   }, []);
@@ -75,10 +77,14 @@ export function SkinPicker({ compact = false }: { compact?: boolean }) {
             <button className="text-accent-bright hover:underline underline-offset-4 disabled:opacity-40" disabled={busy} onClick={() => void run({ reshuffle: 'all' })}>
               {t(skin.theme === 'yugioh' ? 'skin.reshuffleYugioh' : 'skin.reshuffle')}
             </button>
+            <button className="text-accent-bright hover:underline underline-offset-4" onClick={() => setRoster(true)}>
+              {t('roster.open')}
+            </button>
             {msg && <span className="text-text-muted text-sm">{msg}</span>}
           </div>
         </div>
       )}
+      <SkinRoster isOpen={roster} onClose={() => setRoster(false)} />
       {skin.theme === 'classic' && msg && <span className="text-text-muted text-sm">{msg}</span>}
     </div>
   );
