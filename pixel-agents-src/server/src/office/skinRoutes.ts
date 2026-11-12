@@ -63,6 +63,8 @@ export interface Assign {
   agents: Record<string, number>;
   paths: Record<string, number[]>;
   seen: Record<string, number>;
+  /** Forma mínima elegida a mano (índice en su cadena): se muestra aunque el nivel aún no llegue. */
+  floor?: Record<string, number>;
   assignVersion?: number;
 }
 export interface SkinFile {
@@ -76,6 +78,8 @@ export interface SkinFile {
   paths: Record<string, number[]>;
   /** Forma que ya se mostró; si el nivel da más, toca la animación de evolución. */
   seen: Record<string, number>;
+  /** Forma mínima elegida a mano (ver `Assign.floor`). */
+  floor?: Record<string, number>;
   /** Último rango mostrado (tema clásico); si el nivel da más, toca la animación de ascenso. */
   rankSeen: Record<string, number>;
   assignVersion?: number;
@@ -169,7 +173,7 @@ function readData(theme: Theme = 'pokemon'): PokeData | null {
 export function readSkin(): SkinFile {
   try {
     const j = JSON.parse(fs.readFileSync(skinFile(), 'utf8')) as Partial<SkinFile>;
-    return { theme: j.theme === 'pokemon' || j.theme === 'yugioh' ? j.theme : 'classic', yugioh: j.yugioh, rooms: j.rooms ?? {}, agents: j.agents ?? {}, paths: j.paths ?? {}, seen: j.seen ?? {}, rankSeen: j.rankSeen ?? {}, assignVersion: j.assignVersion };
+    return { theme: j.theme === 'pokemon' || j.theme === 'yugioh' ? j.theme : 'classic', yugioh: j.yugioh, rooms: j.rooms ?? {}, agents: j.agents ?? {}, paths: j.paths ?? {}, seen: j.seen ?? {}, floor: j.floor, rankSeen: j.rankSeen ?? {}, assignVersion: j.assignVersion };
   } catch {
     return { theme: 'classic', rooms: {}, agents: {}, paths: {}, seen: {}, rankSeen: {} };
   }
@@ -218,6 +222,7 @@ function forget(skin: Assign, name: string): void {
   delete skin.agents[name];
   delete skin.paths[name];
   delete skin.seen[name];
+  if (skin.floor) delete skin.floor[name];
 }
 
 /** El Pokémon (y su progreso mostrado) acompaña al agente al renombrarlo. */
@@ -228,6 +233,7 @@ export function renameSkinAgent(from: string, to: string): void {
     if (st.agents[from] !== undefined) st.agents[to] = st.agents[from];
     if (st.paths?.[from]) st.paths[to] = st.paths[from];
     if (st.seen?.[from] !== undefined) st.seen[to] = st.seen[from];
+    if (st.floor?.[from] !== undefined) st.floor[to] = st.floor[from];
     forget(st, from);
   }
   if (skin.rankSeen[from] !== undefined) skin.rankSeen[to] = skin.rankSeen[from];
@@ -392,6 +398,7 @@ export function resolveSkin(): {
     skin.agents = {};
     skin.paths = {};
     skin.seen = {};
+    skin.floor = {};
     changed = true;
   }
   if (freezeRoomTypes(skin, data, labels)) changed = true;
@@ -427,7 +434,8 @@ export function resolveSkin(): {
     const evoAt = data.evoLevels?.[String(path.length)] ?? evolutionLevels(path.length);
     const level = levelForXp(xp, toMax);
     const progress = { level, xp, prompts: Math.round(xp / XP_PER_PROMPT), levelXp: xpForLevel(level, toMax), nextXp: level >= MAX_LEVEL ? xp : xpForLevel(level + 1, toMax) };
-    const stage = evoAt.filter((l) => level >= l).length;
+    // La forma elegida a mano es el mínimo: desde ella sigue evolucionando cuando el nivel la supere.
+    const stage = Math.max(evoAt.filter((l) => level >= l).length, Math.min(skin.floor?.[d.name] ?? 0, path.length - 1));
     // La primera vez se parte de la forma y el rango que ya corresponden, sin animación.
     const seen = Math.min(skin.seen[d.name] ?? stage, stage);
     if (skin.seen[d.name] !== seen) {
@@ -527,6 +535,7 @@ export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOpti
         skin.agents = {};
         skin.paths = {};
         skin.seen = {};
+        skin.floor = {};
       }
       if (b.rooms) {
         for (const [label, type] of Object.entries(b.rooms)) {
@@ -541,6 +550,7 @@ export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOpti
         skin.agents = {};
         skin.paths = {};
         skin.seen = {};
+        skin.floor = {};
       } else if (Array.isArray(b.reshuffle)) for (const n of b.reshuffle) forget(skin, n);
       // Elección a mano: el agente queda con esa forma exacta (y su cadena); evoluciona desde ahí.
       if (b.assign) {
@@ -552,6 +562,7 @@ export function registerSkinRoutes(app: FastifyInstance, options: HttpServerOpti
           skin.agents[name] = root;
           skin.paths[name] = chain;
           skin.seen[name] = Math.max(0, chain.indexOf(id));
+          (skin.floor ??= {})[name] = skin.seen[name];
         }
       }
       writeSkin(file);
