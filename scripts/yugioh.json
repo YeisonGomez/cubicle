@@ -137,24 +137,6 @@
      "gen": 1
     },
     {
-     "id": 1019,
-     "name": "X-Head Cannon",
-     "slug": "xheadcannon",
-     "gen": 1
-    },
-    {
-     "id": 1020,
-     "name": "XY-Dragon Cannon",
-     "slug": "xydragon",
-     "gen": 1
-    },
-    {
-     "id": 1021,
-     "name": "XYZ-Dragon Cannon",
-     "slug": "xyzdragon",
-     "gen": 1
-    },
-    {
      "id": 1022,
      "name": "Lord of D.",
      "slug": "lordofd",
@@ -682,28 +664,6 @@
   "1018": {
    "name": "Dragon Master Knight",
    "slug": "dragonmasterk",
-   "gen": 1,
-   "next": []
-  },
-  "1019": {
-   "name": "X-Head Cannon",
-   "slug": "xheadcannon",
-   "gen": 1,
-   "next": [
-    1020
-   ]
-  },
-  "1020": {
-   "name": "XY-Dragon Cannon",
-   "slug": "xydragon",
-   "gen": 1,
-   "next": [
-    1021
-   ]
-  },
-  "1021": {
-   "name": "XYZ-Dragon Cannon",
-   "slug": "xyzdragon",
    "gen": 1,
    "next": []
   },
