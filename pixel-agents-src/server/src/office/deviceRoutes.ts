@@ -145,14 +145,52 @@ export class DeviceStatusTracker {
   private readonly statuses = new Map<number, DeviceStatus>();
   private readonly sinceMs = new Map<number, number>();
   private readonly startedAt = Date.now();
-  /** Terminaron un turno y nadie los ha atendido aún (ver `isPending`). */
-  private readonly pending = new Set<number>();
+  /**
+   * Terminaron un turno y nadie los ha atendido aún (ver `isPending`): nombre del Directorio →
+   * desde cuándo (ms). Por nombre y guardado en disco: los ids cambian en cada arranque y, solo
+   * en memoria, un reinicio de la oficina borraba todos los pendientes.
+   */
+  private readonly pending = new Map<string, number>();
+
+  constructor(
+    private readonly nameOf: (id: number) => string | undefined = () => undefined,
+    private readonly file?: string,
+  ) {
+    if (!file) return;
+    try {
+      const saved = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+      for (const [name, at] of Object.entries(saved)) if (typeof at === 'number') this.pending.set(name, at);
+    } catch {
+      /* sin pendientes guardados */
+    }
+  }
+
+  /** Clave de un agente: su Directorio; sin él, su id (no se guarda). */
+  private key(id: number): string {
+    return this.nameOf(id) ?? `#${id}`;
+  }
+
+  private save(): void {
+    if (!this.file) return;
+    try {
+      fs.mkdirSync(path.dirname(this.file), { recursive: true });
+      fs.writeFileSync(this.file, JSON.stringify(Object.fromEntries([...this.pending].filter(([k]) => !k.startsWith('#'))), null, 2));
+    } catch {
+      /* se reintenta en el próximo cambio */
+    }
+  }
 
   private set(id: number, status: DeviceStatus): void {
     if (this.statuses.get(id) === status) return;
     const before = this.statuses.get(id);
-    if (status === 'idle' && (before === 'working' || before === 'permission')) this.pending.add(id);
-    else if (status !== 'idle') this.pending.delete(id);
+    if (status === 'idle' && (before === 'working' || before === 'permission')) {
+      this.pending.set(this.key(id), Date.now());
+      this.save();
+      if (this.file) console.log(`[Cubicle] Pantalla: ${this.key(id)} queda pendiente (terminó su turno)`);
+    } else if (status !== 'idle' && this.pending.delete(this.key(id))) {
+      this.save();
+      if (this.file) console.log(`[Cubicle] Pantalla: ${this.key(id)} deja de estar pendiente (volvió a trabajar)`);
+    }
     this.statuses.set(id, status);
     this.sinceMs.set(id, Date.now());
   }
@@ -182,7 +220,8 @@ export class DeviceStatusTracker {
       case 'agentClosed':
         this.statuses.delete(id);
         this.sinceMs.delete(id);
-        this.pending.delete(id);
+        // El pendiente de un Directorio sobrevive a que su sesión deje de observarse.
+        this.pending.delete(`#${id}`);
         break;
     }
   }
@@ -197,11 +236,27 @@ export class DeviceStatusTracker {
    * así que "Te necesita" sale de aquí.
    */
   isPending(id: number): boolean {
-    return this.pending.has(id);
+    return this.pending.has(this.key(id));
+  }
+
+  isPendingName(name: string): boolean {
+    return this.pending.has(name);
+  }
+
+  /** Segundos epoch desde que ese Directorio espera, o undefined. */
+  pendingSince(name: string): number | undefined {
+    const at = this.pending.get(name);
+    return at === undefined ? undefined : Math.floor(at / 1000);
   }
 
   attended(id: number): void {
-    this.pending.delete(id);
+    if (this.pending.delete(this.key(id))) this.save();
+  }
+
+  attendedName(name: string): void {
+    if (!this.pending.delete(name)) return;
+    this.save();
+    if (this.file) console.log(`[Cubicle] Pantalla: ${name} deja de estar pendiente (abierto desde la pantalla)`);
   }
 }
 
@@ -221,7 +276,7 @@ const localDay = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() 
 const REST_BG_W = 480;
 const REST_BG_H = 320;
 
-export function deviceSummary(): { epoch: number; tz: number; date: string; lang: string; promptsToday: number; week: number | null; fable: number | null; bg: number } {
+export function deviceSummary(): { epoch: number; tz: number; date: string; lang: string; promptsToday: number; week: number | null; weekAt: number; fable: number | null; bg: number } {
   const now = new Date();
   const lang = getOfficeLang();
   usageByAgent();
@@ -236,6 +291,8 @@ export function deviceSummary(): { epoch: number; tz: number; date: string; lang
     lang,
     promptsToday: usageCache?.today ?? 0,
     week: u?.weekUsed ?? null,
+    // Cuándo se midió (epoch s; 0 = sin dato): la placa avisa si el dato es viejo.
+    weekAt: u?.at ?? 0,
     fable: typeof fableLeftPct === 'number' ? 100 - fableLeftPct : null,
   };
 }
@@ -328,13 +385,15 @@ export function listDeviceAgents(store: AgentStateStore, tracker: DeviceStatusTr
   const list = names.map(({ name, id }): DeviceAgent => {
     const liveId = live.get(name);
     const room = areaOf(name) ?? '';
+    const pend = inApp && tracker.isPendingName(name);
     return {
       id,
       name,
       room,
       color: colors.get(room) ?? ROOM_COLOR_FALLBACK,
-      status: liveId === undefined ? 'idle' : effectiveStatus(tracker.get(liveId), liveId, inApp && tracker.isPending(liveId) ? new Set([...attention, liveId]) : attention),
-      since: tracker.since(liveId ?? id),
+      // En modo app el pendiente va por Directorio: sigue ahí aunque su sesión ya no se observe.
+      status: liveId === undefined ? (pend ? 'question' : 'idle') : effectiveStatus(tracker.get(liveId), liveId, pend ? new Set([...attention, liveId]) : attention),
+      since: (pend ? tracker.pendingSince(name) : undefined) ?? tracker.since(liveId ?? id),
       ...(pokemon[name] ? { pokemon: pokemon[name].name, sprite: pokemon[name].id, ...xpFields(pokemon[name]) } : {}),
       ...(liveId !== undefined && liveId === selectedId ? { selected: true } : {}),
     };
@@ -388,7 +447,7 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 export function startDeviceServer(store: AgentStateStore, officePort: number, areaOf: (name: string) => string | undefined): http.Server | null {
   const cfg = readDeviceConfig();
   if (!cfg) return null;
-  const tracker = new DeviceStatusTracker();
+  const tracker = new DeviceStatusTracker((id) => store.get(id)?.directoryName, path.join(officeDir(), 'pendientes.json'));
   store.on('broadcast', (m: Record<string, unknown>) => tracker.onMessage(m));
   const send = (res: http.ServerResponse, code: number, data: unknown) => {
     res.writeHead(code, { 'Content-Type': 'application/json' });
@@ -447,7 +506,7 @@ export function startDeviceServer(store: AgentStateStore, officePort: number, ar
           const name = directoryForDeviceId(id) ?? store.get(id)?.directoryName;
           const sessionId = name ? sessionIdFor(store, name) : null;
           if (!sessionId || !openInClaudeApp(sessionId)) return send(res, 404, { error: 'agent not found' });
-          for (const a of store.values()) if (a.directoryName === name) tracker.attended(a.id);
+          if (name) tracker.attendedName(name);
           return send(res, 200, { ok: true });
         }
         if (typeof id !== 'number' || !store.has(id)) return send(res, 404, { error: 'agent not found' });

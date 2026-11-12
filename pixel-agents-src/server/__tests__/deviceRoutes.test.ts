@@ -71,4 +71,24 @@ describe('pantalla externa', () => {
     const evolving = { fromName: 'A', from: 'a.gif', toName: 'B', to: 'b.gif', toId: 5, stage: 1 };
     expect(xpFields({ ...base, evolving }).evolve).toEqual({ to: 5, toName: 'B', stage: 1, prompts: 350 });
   });
+
+  it('los pendientes van por Directorio y sobreviven a un reinicio de la oficina', async () => {
+    const fs = await import('fs');
+    const os = await import('os');
+    const path = await import('path');
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pend-')), 'pendientes.json');
+    const before = new DeviceStatusTracker((id) => (id === 7 ? 'HKS Core' : undefined), file);
+    before.onMessage({ type: 'agentStatus', id: 7, status: 'active' });
+    before.onMessage({ type: 'agentStatus', id: 7, status: 'waiting' });
+    expect(before.isPendingName('HKS Core')).toBe(true);
+    // Tras reiniciar el agente tiene otro id; el pendiente sigue por su nombre.
+    const after = new DeviceStatusTracker((id) => (id === 2 ? 'HKS Core' : undefined), file);
+    expect(after.isPendingName('HKS Core')).toBe(true);
+    expect(after.isPending(2)).toBe(true);
+    // Dejar de observar la sesión no lo quita; volver a trabajar, sí.
+    after.onMessage({ type: 'agentClosed', id: 2 });
+    expect(after.isPendingName('HKS Core')).toBe(true);
+    after.onMessage({ type: 'agentStatus', id: 2, status: 'active' });
+    expect(new DeviceStatusTracker(() => undefined, file).isPendingName('HKS Core')).toBe(false);
+  });
 });

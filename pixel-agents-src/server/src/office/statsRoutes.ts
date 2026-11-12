@@ -186,11 +186,17 @@ export function registerStatsRoutes(app: FastifyInstance, options: HttpServerOpt
 }
 
 /** Uso de la cuenta (usage.json de la statusline) y lo que queda de Fable; null sin datos. */
-export function accountUsage(): { raw: Record<string, unknown>; weekUsed: number | null; fable: ReturnType<typeof fableLeft> } | null {
+export function accountUsage(): { raw: Record<string, unknown>; weekUsed: number | null; at: number; fable: ReturnType<typeof fableLeft> } | null {
   try {
     const u = JSON.parse(fs.readFileSync(usageFile(), 'utf8')) as Record<string, unknown> & { seven_day?: { resets_at?: number; used_percentage?: number } | null };
     const fable = fableLeft({ ...fableLimitState(), resetsAt: u.seven_day?.resets_at, cached: cachedFableLimit() }, Date.now());
-    return { raw: u, weekUsed: typeof u.seven_day?.used_percentage === 'number' ? u.seven_day.used_percentage : null, fable };
+    // usage.json lo escribe la statusline de Claude Code en terminal; con las sesiones en la app
+    // de Claude deja de actualizarse. Se entrega cuándo se midió y, si la semana ya reinició
+    // después de esa medida, el porcentaje deja de valer.
+    const at = Math.floor(fs.statSync(usageFile()).mtimeMs / 1000);
+    const reset = u.seven_day?.resets_at;
+    const expired = typeof reset === 'number' && reset * 1000 < Date.now();
+    return { raw: u, weekUsed: !expired && typeof u.seven_day?.used_percentage === 'number' ? u.seven_day.used_percentage : null, at, fable };
   } catch {
     return null;
   }

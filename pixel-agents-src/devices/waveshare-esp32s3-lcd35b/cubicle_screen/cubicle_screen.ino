@@ -158,6 +158,7 @@ uint32_t baseMillis = 0;
 uint32_t serverEpoch = 0;  // epoch UTC del servidor, para "hace cuánto"
 String sumDate;
 int sumPrompts = 0;
+uint32_t sumWeekAt = 0;  // epoch (s) de la medida del consumo semanal; 0 = sin dato
 int sumWeek = -1;   // % consumido de la semana; -1 = sin dato
 int sumFable = -1;  // % consumido de Fable; -1 = sin dato
 bool haveSummary = false;
@@ -692,6 +693,7 @@ bool fetchSummary() {
   sumDate = (const char *)(doc["date"] | "");
   langEn = strcmp(doc["lang"] | "en", "es") != 0;
   sumPrompts = doc["promptsToday"] | 0;
+  sumWeekAt = doc["weekAt"] | 0;
   sumWeek = doc["week"].is<float>() ? (int)round(doc["week"].as<float>()) : -1;
   sumFable = doc["fable"].is<float>() ? (int)round(doc["fable"].as<float>()) : -1;
   haveSummary = true;
@@ -1086,6 +1088,17 @@ void drawCard(int slot, int idx) {
   if (a.level > 0) drawXpBar(x + 8, y + h - 7, w - 16, 3, a.xp);
 }
 
+/** Título de la barra semanal: si la medida tiene más de una hora, dice de cuándo es. */
+String weekTitle() {
+  String t = T("Semana", "Week");
+  if (!sumWeekAt || !serverEpoch) return t;
+  uint32_t now = serverEpoch + (millis() - baseMillis) / 1000;
+  uint32_t age = now > sumWeekAt ? now - sumWeekAt : 0;
+  if (age < 3600) return t;
+  String ago = age < 172800 ? String(age / 3600) + " h" : String(age / 86400) + " d";
+  return t + (langEn ? " · " + ago + " ago" : " · hace " + ago);
+}
+
 /** Barra de consumo con su título y porcentaje. */
 void drawMeter(int x, int y, int w, const char *title, int pct) {
   gfx->setFont(F_NAME);
@@ -1135,7 +1148,7 @@ void drawRest() {
     String n = String(sumPrompts);
     gfx->setCursor(px + pw - 14 - textWidth(n), py + 34);
     gfx->print(n);
-    drawMeter(px + 14, py + 68, pw - 28, T("Semana", "Week"), sumWeek);
+    drawMeter(px + 14, py + 68, pw - 28, weekTitle().c_str(), sumWeek);
     drawMeter(px + 14, py + 114, pw - 28, "Fable", sumFable);
     gfx->setFont(F_SMALL);
     gfx->setTextColor(C_MUTED);
@@ -1153,7 +1166,7 @@ void drawRest() {
   gfx->setTextColor(C_TEXT);
   gfx->setCursor(x0, y + 30);
   gfx->print(sumPrompts);
-  drawMeter(x0 + cw + gap, y, cw, T("Semana", "Week"), sumWeek);
+  drawMeter(x0 + cw + gap, y, cw, weekTitle().c_str(), sumWeek);
   drawMeter(x0 + 2 * (cw + gap), y, cw, "Fable", sumFable);
   gfx->setFont(F_SMALL);
   gfx->setTextColor(C_MUTED);
