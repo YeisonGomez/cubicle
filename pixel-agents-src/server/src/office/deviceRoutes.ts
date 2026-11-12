@@ -456,7 +456,11 @@ export function startDeviceServer(store: AgentStateStore, officePort: number, ar
         return send(res, 200, { ok: true });
       }
       return send(res, 404, { error: 'not found' });
-    })();
+    })().catch((e) => {
+      // Un fallo al atender a la pantalla nunca debe tumbar la oficina.
+      console.error('[Cubicle] Pantalla externa: fallo al atender', req.url, e);
+      if (!res.headersSent) send(res, 500, { error: 'internal error' });
+    });
   });
   server.on('error', (e) => console.error(`[Cubicle] Pantalla externa: no se pudo abrir el puerto ${cfg.port}: ${e.message}`));
   server.listen(cfg.port, '0.0.0.0', () => console.log(`[Cubicle] Pantalla externa escuchando en el puerto ${cfg.port}`));

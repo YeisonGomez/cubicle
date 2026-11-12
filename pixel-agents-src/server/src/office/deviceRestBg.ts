@@ -1,6 +1,7 @@
 /**
- * Fondo de la vista de reposo de la pantalla externa. El usuario deja imágenes PNG en
- * `<oficina>/reposo/` (datos suyos: nunca van al repo) y cada 10 minutos toca una al azar.
+ * Fondo de la vista de reposo de la pantalla externa. Salen de `<oficina>/reposo/*.png` si el
+ * usuario puso las suyas; si no, de `scripts/reposo/<tema>/` (las que acompañan a un tema).
+ * Cada 10 minutos toca otra, en vueltas barajadas.
  * Se compone al tamaño de la pantalla: la propia imagen, ampliada, desenfocada y oscurecida,
  * cubre todo el lienzo, y encima va la imagen a la derecha, fundida en óvalo (sin bordes rectos);
  * la izquierda queda libre para la hora y las barras. Sale en RGB565 (little endian), listo
@@ -10,7 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PNG } from 'pngjs';
 
-import { officeDir } from '../officePaths.js';
+import { officeDir, scriptsDir } from '../officePaths.js';
 
 /** Ancho de la caja de la derecha donde cabe la figura entera. */
 const FIGURE_BOX_W = 256;
@@ -35,24 +36,62 @@ let cached: { key: string; data: Buffer } | null = null;
 
 type Rgba = { width: number; height: number; data: Uint8Array };
 
-function files(): string[] {
+function pngsIn(folder: string): Array<{ dir: string; file: string }> {
   try {
     return fs
-      .readdirSync(dir())
+      .readdirSync(folder)
       .filter((f) => /\.png$/i.test(f))
-      .sort();
+      .sort()
+      .map((file) => ({ dir: folder, file }));
   } catch {
     return [];
   }
 }
 
-/** Elección de un tramo de tiempo: pseudoaleatoria pero fija dentro del tramo. */
-function pickFor(slot: number, n: number): number {
-  let x = (slot * 2654435761) >>> 0;
-  x ^= x >>> 15;
-  x = Math.imul(x, 2246822519) >>> 0;
-  x ^= x >>> 13;
-  return x % n;
+/** Tema de personajes activo (solo se lee el nombre). */
+function theme(): string {
+  try {
+    return String((JSON.parse(fs.readFileSync(path.join(officeDir(), 'skin.json'), 'utf8')) as { theme?: unknown }).theme ?? 'classic');
+  } catch {
+    return 'classic';
+  }
+}
+
+/** Las imágenes del usuario si puso alguna; si no, las que trae el repo para el tema activo. */
+function files(): Array<{ dir: string; file: string }> {
+  const own = pngsIn(dir());
+  if (own.length > 0) return own;
+  const t = theme();
+  return /^[a-z]+$/.test(t) ? pngsIn(path.join(scriptsDir(), 'reposo', t)) : [];
+}
+
+/** Entero pseudoaleatorio sin signo a partir de una semilla. */
+function hash(seed: number): number {
+  let x = seed >>> 0;
+  x = Math.imul(x ^ (x >>> 16), 2246822519) >>> 0;
+  x = Math.imul(x ^ (x >>> 13), 3266489917) >>> 0;
+  // `^` deja un entero con signo: sin `>>> 0` salían índices negativos (y el servidor se caía).
+  return (x ^ (x >>> 16)) >>> 0;
+}
+
+/** Orden barajado de n imágenes para una vuelta: cada una sale una vez antes de repetir. */
+function shuffled(round: number, n: number): number[] {
+  const order = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = hash(round * 7919 + i) % (i + 1);
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return order;
+}
+
+/** Índice de la imagen de un tramo: vueltas barajadas, sin repetir al pasar de una vuelta a otra. */
+export function pickFor(slot: number, n: number): number {
+  if (n <= 1) return 0;
+  const round = Math.floor(slot / n);
+  const order = shuffled(round, n);
+  const prevLast = shuffled(round - 1, n)[n - 1];
+  if (order[0] === prevLast) [order[0], order[1]] = [order[1], order[0]];
+  return order[slot % n];
 }
 
 /** Imagen que toca ahora y su versión (cambia con el tramo o con el archivo); null si no hay. */
@@ -60,12 +99,11 @@ export function currentRestBg(skip = 0, now = Date.now()): { file: string; versi
   const list = files();
   if (list.length === 0) return null;
   const slot = Math.floor(now / ROTATE_MS);
-  let i = pickFor(slot, list.length);
-  // Nunca la misma dos tramos seguidos.
-  if (list.length > 1 && i === pickFor(slot - 1, list.length)) i = (i + 1) % list.length;
   // `skip`: la pantalla pide la siguiente (un toque en el reposo las va pasando).
-  i = (i + Math.max(0, skip)) % list.length;
-  const file = path.join(dir(), list[i]);
+  const i = (pickFor(slot, list.length) + Math.max(0, Math.floor(skip))) % list.length;
+  const name = list[i];
+  if (!name) return null;
+  const file = path.join(name.dir, name.file);
   let mtime = 0;
   try {
     mtime = Math.floor(fs.statSync(file).mtimeMs / 1000);
