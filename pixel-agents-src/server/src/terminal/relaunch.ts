@@ -340,10 +340,18 @@ export function readRememberedSessions(): Record<string, string> {
   }
 }
 
-/** Guarda la conversación de cada agente con terminal. Nunca borra: al morir la terminal hay que recordarla. */
-export function rememberSessions(deps: Pick<LaunchStandaloneAgentDeps, 'store' | 'ptyManager'>): void {
+/** Guarda la conversación de cada agente con terminal (y, con `adoptExternal`, la observada de un Directorio sin ninguna). Nunca borra: al morir la terminal hay que recordarla. */
+export function rememberSessions(deps: Pick<LaunchStandaloneAgentDeps, 'store' | 'ptyManager'>, opts: { adoptExternal?: boolean } = {}): void {
   const before = readRememberedSessions();
   const next = { ...before };
+  // Con las sesiones en la app de Claude no hay terminales: un Directorio nacido allí no tendría
+  // conversación recordada (y la pantalla externa no podría abrirlo). Se anota la sesión observada,
+  // solo si el Directorio aún no tiene ninguna: nunca pisa la de una terminal.
+  if (opts.adoptExternal) {
+    for (const a of deps.store.values()) {
+      if (a.isExternal && a.directoryName && !next[a.directoryName] && a.sessionId && a.jsonlFile && fs.existsSync(a.jsonlFile)) next[a.directoryName] = a.sessionId;
+    }
+  }
   const claims: Array<{ sessionId: string; name: string }> = [];
   for (const a of deps.store.values()) {
     if (a.isExternal || !a.directoryName || !deps.ptyManager.has(a.id)) continue;

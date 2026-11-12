@@ -365,7 +365,7 @@ async function main(): Promise<void> {
 
     if (args.terminal) {
       // Recuerda la conversación de cada Directorio para el próximo reinicio.
-      setInterval(() => rememberSessions({ store, ptyManager }), 30_000).unref();
+      setInterval(() => rememberSessions({ store, ptyManager }, { adoptExternal: getSessionHost() === 'claude-app' }), 30_000).unref();
     }
 
     // Con las sesiones en la app de Claude (Ajustes), Cubicle no abre terminales: solo observa.
