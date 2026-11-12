@@ -178,7 +178,6 @@ int slideDx = 0;
 
 // Aviso a pantalla completa: un agente terminó ('f') o pide permiso ('p').
 static const uint32_t ALERT_MS = 5000;
-static const uint32_t ALERT_BLINK_MS = 2000;
 int alertAgentId = -1;
 char alertKind = 0;
 uint32_t alertStart = 0;
@@ -824,6 +823,11 @@ void drawCard(int slot, int idx) {
     gfx->drawRoundRect(x, y, w, h, 8, bc);
     gfx->drawRoundRect(x + 1, y + 1, w - 2, h - 2, 7, bc);
   }
+  // Acaba de terminar o de pedir permiso: su borde parpadea grueso unos segundos, sin tapar las demás fichas.
+  if (a.id == alertAgentId && ((millis() - alertStart) / 250) % 2 == 0) {
+    uint16_t ac = alertKind == 'p' ? C_NEED : sc;
+    for (int i = 2; i < 6; i++) gfx->drawRoundRect(x + i, y + i, w - 2 * i, h - 2 * i, 8 - i > 2 ? 8 - i : 2, ac);
+  }
   int cx = x + w / 2;
   String label = statusLabel(a.status);
   String time = mode == MODE_FOCUS ? elapsed(a.since) : "";
@@ -908,40 +912,7 @@ void drawRest() {
   drawToggle();
 }
 
-/** Aviso a pantalla completa: el agente que terminó o pide permiso. */
-void drawAlert(const Agent &a) {
-  uint16_t sc = alertKind == 'p' ? C_NEED : C_WORK;
-  gfx->fillScreen(C_BG);
-  uint32_t dt = millis() - alertStart;
-  if (dt > ALERT_BLINK_MS || (dt / 250) % 2 == 0)
-    for (int i = 0; i < 6; i++) gfx->drawRoundRect(i, i, W - 2 * i, H - 2 * i, 14 - i, sc);
-  drawAvatar(a, 130, 250, 6);
-  int tx = 250, tw = W - tx - 20;
-  gfx->setFont(F_TITLE);
-  gfx->setTextColor(sc);
-  gfx->setCursor(tx, 112);
-  gfx->print(alertKind == 'p' ? T("Pide permiso", "Needs permission") : T("Terminó", "Finished"));
-  gfx->setFont(F_BIG);
-  gfx->setTextColor(C_TEXT);
-  gfx->setCursor(tx, 148);
-  gfx->print(fitText(a.name, tw));
-  gfx->setFont(F_NAME);
-  gfx->fillCircle(tx + 5, 171, 5, a.color);
-  gfx->setTextColor(C_MUTED);
-  gfx->setCursor(tx + 16, 176);
-  gfx->print(fitText(a.room, tw - 16));
-  gfx->setFont(F_SMALL);
-  gfx->setCursor(tx, 226);
-  gfx->print(T("Toca para abrirlo", "Tap to open"));
-}
-
 void draw() {
-  Agent *alerted = alertAgentId >= 0 ? agentById(alertAgentId) : nullptr;
-  if (alerted) {
-    drawAlert(*alerted);
-    gfx->flush();
-    return;
-  }
   if (mode == MODE_REST) {
     drawRest();
     gfx->flush();
@@ -1085,7 +1056,7 @@ void startNetServices() {
     if (v == "rest") {
       previewRestUntil = millis() + 8000;
     } else if (v == "alert" && agentCount > 0) {
-      alertAgentId = agents[0].id;
+      alertAgentId = agents[viewCount > 0 ? view[pageFirst[page]] : 0].id;
       alertKind = web.arg("k") == "p" ? 'p' : 'f';
       alertStart = millis();
     } else if (v == "toggle") {
@@ -1249,7 +1220,7 @@ void loop() {
     dirty = true;
   }
 
-  // Toque. Con aviso: abre ese agente. En reposo: despierta. En la cabecera: alterna ACTIVOS/TODOS.
+  // Toque. En reposo: despierta. En la cabecera: alterna ACTIVOS/TODOS.
   // Franjas laterales (o deslizar): cambian de diapositiva. Sobre una ficha: la abre al soltar.
   static int downX = 0, downY = 0, lastX = 0;
   static bool consumed = false;
@@ -1261,12 +1232,7 @@ void loop() {
     pressedIndex = -1;
     consumed = false;
     lastActivityMs = millis();
-    if (alertAgentId >= 0) {
-      Agent *a = agentById(alertAgentId);
-      alertAgentId = -1;
-      consumed = true;
-      if (a) openAgent(*a);
-    } else if (dimmed) {
+    if (dimmed) {
       rebuildView();  // solo despierta (sube la luz)
       consumed = true;
     } else if (mode == MODE_REST || y < HEADER_H + 4) {
