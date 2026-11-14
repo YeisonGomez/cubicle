@@ -32,13 +32,15 @@ Después basta el cable de carga: la pantalla funciona sola por Wi-Fi.
 
 - **Activos** (por defecto si hay alguno): solo los agentes que te necesitan (primero, del que más lleva esperando) y los que trabajan, en grande y con cuánto llevan.
 - **Todos**: la cuadrícula completa por salas. Se alterna con Activos tocando la cabecera ("Ver todos" / "Ver activos").
-- **Reposo**: cuando ningún agente trabaja ni te necesita: reloj, prompts de hoy y consumo de la semana y de Fable; tras 5 min sin toques, con la luz atenuada. Puede llevar un fondo (ver "Fondos de reposo"): con fondo, un toque pasa a la imagen siguiente y la franja de arriba lleva a Todos; sin fondo, cualquier toque lleva a Todos.
+- **Reposo**: cuando ningún agente trabaja ni te necesita: reloj, prompts de hoy y consumo de la semana y de Fable; tras 5 min sin toques, con la luz a la mitad. Puede llevar un fondo (ver "Fondos de reposo"): con fondo, un toque pasa a la imagen siguiente y la franja de arriba lleva a Todos; sin fondo, cualquier toque lleva a Todos.
 - **Aviso**: cuando un agente termina o pide permiso, el borde de su ficha parpadea grueso 5 s; las demás fichas siguen a la vista.
 
 - **Experiencia** (temas Pokémon y Yu-Gi-Oh): cada ficha lleva el nivel, una barra de 10 tramos y los prompts que faltan para evolucionar.
 - **Evolución**: cuando un Pokémon sube lo suficiente, la pantalla lo anima a pantalla completa y, al cerrarla con un toque, el agente pasa a su forma nueva.
 
 Los textos salen en el idioma de la oficina (ES/EN).
+
+- **Brillo**: 30 min sin tocar la pantalla bajan la luz a un 20 %, aunque haya agentes en pantalla. Un toque, un aviso o una evolución la devuelven al máximo; el primer toque solo la despierta.
 
 ## Fondos de reposo
 

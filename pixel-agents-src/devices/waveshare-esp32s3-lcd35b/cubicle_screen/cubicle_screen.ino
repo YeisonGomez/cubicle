@@ -173,8 +173,12 @@ bool userAll = false;         // con agentes activos, el usuario pidió ver TODO
 uint32_t lastActivityMs = 0;  // último toque o último momento con agentes activos
 static const uint32_t REST_AFTER_MS = 5UL * 60UL * 1000UL;
 static const int BL_FULL = 255;
-static const int BL_REST = 40;
-bool dimmed = false;  // luz atenuada: 5 min sin activos ni toques
+static const int BL_REST = 128;   // reposo (5 min sin activos ni toques): luz a la mitad
+static const int BL_SLEEP = 51;   // 30 min sin tocarla: ~20 %, aunque haya agentes en pantalla
+static const uint32_t SLEEP_AFTER_MS = 30UL * 60UL * 1000UL;
+uint32_t lastTouchMs = 0;  // último toque, o último aviso o evolución (la despiertan)
+int backlight = -1;        // brillo aplicado ahora
+bool dimmed = false;  // luz por debajo del máximo (reposo o 30 min sin tocarla)
 uint32_t previewRestUntil = 0;  // GET /preview?v=rest: enseña el reposo unos segundos (diagnóstico)
 
 // Lo que se muestra: índices de agents[] y sus diapositivas [first, last) sobre view[].
@@ -315,11 +319,13 @@ bool rebuildView() {
     mode = userAll ? MODE_GRID : MODE_REST;
   }
   if (millis() < previewRestUntil) mode = MODE_REST;
-  bool dim = active == 0 && millis() - lastActivityMs > REST_AFTER_MS;
-  if (dim != dimmed) {
-    dimmed = dim;
-    analogWrite(PIN_BL, dim ? BL_REST : BL_FULL);
+  // Brillo: 30 min sin tocarla baja a ~20 % (con o sin agentes); en reposo, a la mitad.
+  int level = millis() - lastTouchMs > SLEEP_AFTER_MS ? BL_SLEEP : (active == 0 && millis() - lastActivityMs > REST_AFTER_MS) ? BL_REST : BL_FULL;
+  if (level != backlight) {
+    backlight = level;
+    analogWrite(PIN_BL, level);
   }
+  dimmed = level != BL_FULL;
 
   viewCount = 0;
   pageCount = 0;
@@ -536,6 +542,7 @@ void detectAlerts() {
         alertKind = kind;
         alertStart = millis();
         lastActivityMs = millis();
+        lastTouchMs = millis();  // un agente terminó o pide permiso: la pantalla se ilumina
       }
     }
   }
@@ -1283,6 +1290,7 @@ void startNetServices() {
   ArduinoOTA.setHostname("cubicle-pantalla");
   ArduinoOTA.setPassword(cfgKey.c_str());
   ArduinoOTA.onStart([]() {
+    backlight = BL_FULL;
     analogWrite(PIN_BL, BL_FULL);
     drawMessage(T("Actualizando", "Updating"), T("No la desconectes...", "Do not unplug..."));
   });
@@ -1496,7 +1504,9 @@ void loop() {
       evoPlaying = true;
       evoStart = millis();
       lastActivityMs = millis();
+      lastTouchMs = millis();
       dimmed = false;
+      backlight = BL_FULL;
       analogWrite(PIN_BL, BL_FULL);
       dirty = true;
     } else if ((to && to->failed) || millis() - evoQueued > EVO_WAIT_MS) {
@@ -1540,6 +1550,7 @@ void loop() {
     pressedIndex = -1;
     consumed = false;
     lastActivityMs = millis();
+    lastTouchMs = millis();
     if (evoPlaying) {
       // Durante la animación no se toca nada; al final, un toque la cierra.
       consumed = true;
