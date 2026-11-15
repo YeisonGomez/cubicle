@@ -176,7 +176,8 @@ static const int BL_FULL = 255;
 static const int BL_REST = 128;   // reposo (5 min sin activos ni toques): luz a la mitad
 static const int BL_SLEEP = 51;   // 30 min sin tocarla: ~20 %, aunque haya agentes en pantalla
 static const uint32_t SLEEP_AFTER_MS = 30UL * 60UL * 1000UL;
-uint32_t lastTouchMs = 0;  // último toque, o último aviso o evolución (la despiertan)
+uint32_t lastTouchMs = 0;  // último toque de verdad (los avisos solo encienden mientras duran)
+uint32_t touchCount = 0;   // diagnóstico (/info)
 int backlight = -1;        // brillo aplicado ahora
 bool dimmed = false;  // luz por debajo del máximo (reposo o 30 min sin tocarla)
 uint32_t previewRestUntil = 0;  // GET /preview?v=rest: enseña el reposo unos segundos (diagnóstico)
@@ -320,7 +321,10 @@ bool rebuildView() {
   }
   if (millis() < previewRestUntil) mode = MODE_REST;
   // Brillo: 30 min sin tocarla baja a ~20 % (con o sin agentes); en reposo, a la mitad.
-  int level = millis() - lastTouchMs > SLEEP_AFTER_MS ? BL_SLEEP : (active == 0 && millis() - lastActivityMs > REST_AFTER_MS) ? BL_REST : BL_FULL;
+  // Un aviso o una evolución la encienden mientras duran, sin reiniciar la cuenta: con
+  // muchos agentes siempre hay alguno terminando y la luz no bajaba nunca.
+  bool lit = evoPlaying || alertAgentId >= 0;
+  int level = lit ? BL_FULL : millis() - lastTouchMs > SLEEP_AFTER_MS ? BL_SLEEP : (active == 0 && millis() - lastActivityMs > REST_AFTER_MS) ? BL_REST : BL_FULL;
   if (level != backlight) {
     backlight = level;
     analogWrite(PIN_BL, level);
@@ -542,7 +546,10 @@ void detectAlerts() {
         alertKind = kind;
         alertStart = millis();
         lastActivityMs = millis();
-        lastTouchMs = millis();  // un agente terminó o pide permiso: la pantalla se ilumina
+        // Un agente terminó o pide permiso: la pantalla se ilumina mientras dura el aviso.
+        dimmed = false;
+        backlight = BL_FULL;
+        analogWrite(PIN_BL, BL_FULL);
       }
     }
   }
@@ -1298,9 +1305,9 @@ void startNetServices() {
   web.on("/info", []() {
     int16_t ax = 0, ay = 0, az = 0;
     bool imu = readAccel(ax, ay, az);
-    char out[260];
-    snprintf(out, sizeof(out), "{\"rotation\":%d,\"manual\":%s,\"imu\":%s,\"ax\":%d,\"ay\":%d,\"az\":%d,\"agents\":%d,\"mode\":%d,\"shown\":%d,\"pages\":%d,\"page\":%d,\"alert\":%d,\"error\":\"%s\"}",
-             rotation, rotationManual ? "true" : "false", imu ? "true" : "false", ax, ay, az, agentCount, (int)mode, viewCount, pageCount, page, alertAgentId, errorText.c_str());
+    char out[360];
+    snprintf(out, sizeof(out), "{\"rotation\":%d,\"manual\":%s,\"imu\":%s,\"ax\":%d,\"ay\":%d,\"az\":%d,\"agents\":%d,\"mode\":%d,\"shown\":%d,\"pages\":%d,\"page\":%d,\"alert\":%d,\"bl\":%d,\"idle\":%lu,\"touches\":%lu,\"up\":%lu,\"error\":\"%s\"}",
+             rotation, rotationManual ? "true" : "false", imu ? "true" : "false", ax, ay, az, agentCount, (int)mode, viewCount, pageCount, page, alertAgentId, backlight, (unsigned long)((millis() - lastTouchMs) / 1000), (unsigned long)touchCount, (unsigned long)(millis() / 1000), errorText.c_str());
     web.send(200, "application/json", out);
   });
   web.on("/rotate", []() {
@@ -1504,7 +1511,6 @@ void loop() {
       evoPlaying = true;
       evoStart = millis();
       lastActivityMs = millis();
-      lastTouchMs = millis();
       dimmed = false;
       backlight = BL_FULL;
       analogWrite(PIN_BL, BL_FULL);
@@ -1551,6 +1557,7 @@ void loop() {
     consumed = false;
     lastActivityMs = millis();
     lastTouchMs = millis();
+    touchCount++;
     if (evoPlaying) {
       // Durante la animación no se toca nada; al final, un toque la cierra.
       consumed = true;

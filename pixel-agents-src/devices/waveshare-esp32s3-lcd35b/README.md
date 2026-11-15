@@ -40,7 +40,7 @@ Después basta el cable de carga: la pantalla funciona sola por Wi-Fi.
 
 Los textos salen en el idioma de la oficina (ES/EN).
 
-- **Brillo**: 30 min sin tocar la pantalla bajan la luz a un 20 %, aunque haya agentes en pantalla. Un toque, un aviso o una evolución la devuelven al máximo; el primer toque solo la despierta.
+- **Brillo**: 30 min sin tocar la pantalla bajan la luz a un 20 %, aunque haya agentes en pantalla. Solo un toque reinicia la cuenta (el primero solo la despierta); un aviso o una evolución la encienden mientras duran y luego vuelve a bajar. `GET /info` muestra `bl` (brillo 0-255), `idle` (segundos sin tocarla) y `touches`.
 
 ## Fondos de reposo
 
