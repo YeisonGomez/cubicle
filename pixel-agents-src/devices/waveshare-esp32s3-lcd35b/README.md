@@ -70,3 +70,7 @@ Controlador AXS15231B (pantalla por QSPI 320x480 y táctil por I2C 0x3B, SDA 8 /
 
 - **Solo redes de 2,4 GHz:** la ESP32 no ve las redes de 5 GHz (a menudo las que llevan "Plus" o "5G"). Si son del mismo router, el Mac en la de 5 GHz y la pantalla en la de 2,4 GHz se ven igual.
 - **"No encuentro <tu-mac>.local":** algunos routers no dejan pasar mDNS. La pantalla usa entonces la IP guardada; si la IP del Mac cambia, `./flash.sh config` la actualiza (o reserva la IP del Mac en el router).
+
+## Micrófono (prueba)
+
+La placa trae micrófono y códec ES8311 (I2C 0x18 en el bus de siempre; I2S: MCLK 44, BCLK 13, LRCK 15, DOUT 16, DIN 14). `GET /mic?s=N` (con `X-Cubicle-Key`, 1-8 s) graba y devuelve un WAV de 16 kHz mono; la pantalla se congela mientras graba. El driver `es8311.*` es de Espressif (Apache-2.0, con su cabecera), tomado de las demos de Waveshare.

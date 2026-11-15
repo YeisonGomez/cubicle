@@ -24,6 +24,8 @@
  * Pantalla: controlador AXS15231B por QSPI (320x480) y táctil del mismo chip por I2C
  * (0x3B). El reset de la pantalla va por el expansor TCA9554 (0x20, pin 1).
  */
+#include "ESP_I2S.h"
+#include "es8311.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <ArduinoOTA.h>
@@ -49,6 +51,13 @@
 #define PIN_SDA 8
 #define PIN_SCL 7
 #define PIN_BOOT 0
+// Audio: códec ES8311 (I2C en el mismo bus) + micrófono de la placa por I2S.
+#define PIN_I2S_MCK 44
+#define PIN_I2S_BCK 13
+#define PIN_I2S_LRCK 15
+#define PIN_I2S_DOUT 16
+#define PIN_I2S_DIN 14
+static const int MIC_RATE = 16000;
 #define TOUCH_ADDR 0x3B
 
 // ── Pantalla: 480x320 en horizontal, dibujada en un lienzo en PSRAM ──
@@ -1297,6 +1306,30 @@ void handleSerial() {
 }
 
 // ── Actualización por Wi-Fi y diagnóstico ─────────────────────────
+I2SClass micI2S;
+bool micOn = false;
+/** Arranca el códec y el I2S la primera vez que se usa el micrófono. */
+bool micReady() {
+  if (micOn) return true;
+  es8311_handle_t es = es8311_create(I2C_NUM_0, ES8311_ADDRRES_0);
+  if (!es) return false;
+  const es8311_clock_config_t clk = {
+    .mclk_inverted = false,
+    .sclk_inverted = false,
+    .mclk_from_mclk_pin = true,
+    .mclk_frequency = MIC_RATE * 256,
+    .sample_frequency = MIC_RATE,
+  };
+  if (es8311_init(es, &clk, ES8311_RESOLUTION_16, ES8311_RESOLUTION_16) != ESP_OK) return false;
+  es8311_microphone_config(es, false);
+  es8311_microphone_gain_set(es, ES8311_MIC_GAIN_24DB);
+  es8311_voice_volume_set(es, 0, NULL);  // altavoz en silencio durante la prueba
+  micI2S.setPins(PIN_I2S_BCK, PIN_I2S_LRCK, PIN_I2S_DOUT, PIN_I2S_DIN, PIN_I2S_MCK);
+  if (!micI2S.begin(I2S_MODE_STD, MIC_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO, I2S_STD_SLOT_LEFT)) return false;
+  micOn = true;
+  return true;
+}
+
 /** OTA (contraseña = la clave de Cubicle; `./flash.sh ota`), GET /info, /rotate y /shot. */
 void startNetServices() {
   netReady = true;
@@ -1315,6 +1348,28 @@ void startNetServices() {
     snprintf(out, sizeof(out), "{\"rotation\":%d,\"manual\":%s,\"imu\":%s,\"ax\":%d,\"ay\":%d,\"az\":%d,\"agents\":%d,\"mode\":%d,\"shown\":%d,\"pages\":%d,\"page\":%d,\"alert\":%d,\"bl\":%d,\"idle\":%lu,\"touches\":%lu,\"up\":%lu,\"error\":\"%s\"}",
              rotation, rotationManual ? "true" : "false", imu ? "true" : "false", ax, ay, az, agentCount, (int)mode, viewCount, pageCount, page, alertAgentId, backlight, (unsigned long)((millis() - lastTouchMs) / 1000), (unsigned long)touchCount, (unsigned long)(millis() / 1000), errorText.c_str());
     web.send(200, "application/json", out);
+  });
+  // Prueba del micrófono: graba ?s= segundos (1-8) y devuelve un WAV de 16 kHz. Pide la clave.
+  web.on("/mic", []() {
+    if (web.header("X-Cubicle-Key") != cfgKey) {
+      web.send(401, "text/plain", "unauthorized");
+      return;
+    }
+    int secs = constrain(web.arg("s").toInt(), 1, 8);
+    if (!micReady() ) {
+      web.send(500, "text/plain", "mic init failed");
+      return;
+    }
+    size_t size = 0;
+    uint8_t *wav = micI2S.recordWAV(secs, &size);
+    if (!wav) {
+      web.send(500, "text/plain", "record failed");
+      return;
+    }
+    web.setContentLength(size);
+    web.send(200, "audio/wav", "");
+    web.sendContent((const char *)wav, size);
+    free(wav);
   });
   web.on("/rotate", []() {
     setManualRotation(rotation == 1 ? 3 : 1);
