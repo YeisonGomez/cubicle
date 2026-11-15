@@ -176,6 +176,7 @@ static const int BL_FULL = 255;
 static const int BL_REST = 128;   // reposo (5 min sin activos ni toques): luz a la mitad
 static const int BL_SLEEP = 26;   // 30 min sin tocarla: ~10 %, aunque haya agentes en pantalla
 static const uint32_t SLEEP_AFTER_MS = 30UL * 60UL * 1000UL;
+static const uint32_t OFF_AFTER_MS = 60UL * 60UL * 1000UL;  // 1 h sin tocarla: luz apagada
 uint32_t lastTouchMs = 0;  // último toque de verdad (los avisos solo encienden mientras duran)
 uint32_t touchCount = 0;   // diagnóstico (/info)
 int backlight = -1;        // brillo aplicado ahora
@@ -323,8 +324,10 @@ bool rebuildView() {
   // Brillo: 30 min sin tocarla baja a ~20 % (con o sin agentes); en reposo, a la mitad.
   // Un aviso o una evolución la encienden mientras duran, sin reiniciar la cuenta: con
   // muchos agentes siempre hay alguno terminando y la luz no bajaba nunca.
-  bool lit = evoPlaying || alertAgentId >= 0;
-  int level = lit ? BL_FULL : millis() - lastTouchMs > SLEEP_AFTER_MS ? BL_SLEEP : (active == 0 && millis() - lastActivityMs > REST_AFTER_MS) ? BL_REST : BL_FULL;
+  // Tras 1 h sin tocarla la luz se apaga del todo y ni los avisos la encienden: solo un toque.
+  uint32_t untouched = millis() - lastTouchMs;
+  bool lit = (evoPlaying || alertAgentId >= 0) && untouched <= OFF_AFTER_MS;
+  int level = untouched > OFF_AFTER_MS ? 0 : lit ? BL_FULL : untouched > SLEEP_AFTER_MS ? BL_SLEEP : (active == 0 && millis() - lastActivityMs > REST_AFTER_MS) ? BL_REST : BL_FULL;
   if (level != backlight) {
     backlight = level;
     analogWrite(PIN_BL, level);
@@ -546,10 +549,13 @@ void detectAlerts() {
         alertKind = kind;
         alertStart = millis();
         lastActivityMs = millis();
-        // Un agente terminó o pide permiso: la pantalla se ilumina mientras dura el aviso.
-        dimmed = false;
-        backlight = BL_FULL;
-        analogWrite(PIN_BL, BL_FULL);
+        // Un agente terminó o pide permiso: la pantalla se ilumina mientras dura el aviso
+        // (no si lleva 1 h apagada: ahí solo la enciende un toque).
+        if (millis() - lastTouchMs <= OFF_AFTER_MS) {
+          dimmed = false;
+          backlight = BL_FULL;
+          analogWrite(PIN_BL, BL_FULL);
+        }
       }
     }
   }
@@ -1505,7 +1511,8 @@ void loop() {
   }
 
   // Evolución en cola: empieza cuando ya están los dos sprites; si el nuevo no llega, se deja para otra vez.
-  if (evoAgentId >= 0 && !evoPlaying) {
+  // Con la luz apagada (1 h sin tocarla) espera: nadie la vería.
+  if (evoAgentId >= 0 && !evoPlaying && millis() - lastTouchMs <= OFF_AFTER_MS) {
     Sprite *to = findSprite(evoTarget);
     if (to && to->px) {
       evoPlaying = true;
