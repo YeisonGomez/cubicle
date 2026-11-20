@@ -161,6 +161,38 @@ String toastText;
 uint32_t toastUntil = 0;
 int pressedIndex = -1;  // índice en agents[] de la ficha pulsada
 
+// ── Vista del agente (dejar pulsada su ficha): resumen de su última respuesta y responder por voz ──
+// Solo si el servidor lo anuncia (`voice` en /device/agents: opción activada y sesiones en la app).
+bool voiceEnabled = false;
+enum DetailState { DV_VIEW, DV_REC, DV_TRANSCRIBING, DV_CONFIRM, DV_SENDING };
+int detailId = -1;  // agente abierto en su vista; -1 = ninguno
+DetailState dv = DV_VIEW;
+enum BriefState { BR_LOADING, BR_READY, BR_NONE };
+BriefState briefState = BR_LOADING;
+String briefNeed, briefSummary;
+uint32_t briefNextTry = 0, briefSince = 0;
+char detailStatus = 0;     // estado del agente cuando se pidió el resumen
+String heardText;          // lo que entendió del dictado
+String detailNote;         // aviso (error) sobre los botones
+uint32_t detailNoteUntil = 0;
+int detailPress = 0;       // botón pulsado: 1 volver, 2 abrir, 3 hablar, 4 cancelar, 5 enviar
+// Tras abrir la vista o acabar de dictar el dedo sigue apoyado y el táctil pierde lecturas:
+// durante este margen no se acepta ningún botón (un rebote caería sobre "Enviar").
+uint32_t detailQuietUntil = 0;
+static const uint32_t DETAIL_QUIET_MS = 700;
+uint8_t *recBuf = nullptr;  // WAV dictado (PSRAM)
+int recLevel = 0;           // nivel del micrófono, 0-100 (indicador al grabar)
+static const int REC_MAX_S = 20;
+static const uint32_t REC_MIN_MS = 600;
+static const uint32_t REC_RELEASE_MS = 250;  // el táctil pierde lecturas: soltar = este tiempo sin contacto
+static const uint32_t LONG_PRESS_MS = 600;
+static const int LONG_PRESS_SLOP = 24;
+static const uint32_t BRIEF_POLL_MS = 1500;
+static const uint32_t BRIEF_WAIT_MS = 60000;
+static const uint32_t DETAIL_IDLE_MS = 3UL * 60UL * 1000UL;  // sin tocarla, vuelve a las fichas
+static const int DETAIL_BAR_H = 52;
+#define F_BODY u8g2_font_helvR10_tf
+
 // ── Resumen (reposo) y reloj ──────────────────────────────────────
 uint32_t baseEpoch = 0;  // hora local (epoch + zona) en el momento baseMillis
 uint32_t baseMillis = 0;
@@ -611,6 +643,7 @@ bool fetchAgents() {
     errorText = T("Respuesta no válida", "Invalid response");
     return true;
   }
+  voiceEnabled = doc["voice"] | false;
   agentCount = 0;
   for (JsonObject a : doc["agents"].as<JsonArray>()) {
     if (agentCount >= MAX_AGENTS) break;
@@ -1206,6 +1239,10 @@ void draw() {
     drawEvolution();
     return;
   }
+  if (detailId >= 0) {
+    drawDetail();
+    return;
+  }
   if (mode == MODE_REST) {
     drawRest();
     gfx->flush();
@@ -1250,6 +1287,7 @@ void draw() {
 /** ¿Hay sprites animados a la vista? */
 bool screenAnimates() {
   if (alertAgentId >= 0 || evoPlaying) return true;
+  if (detailId >= 0) return true;
   if (mode == MODE_REST) return false;
   for (int i = pageFirst[page]; i < pageLast[page]; i++) {
     const Agent &a = agents[view[i]];
@@ -1303,7 +1341,7 @@ void handleSerial() {
   }
 }
 
-// ── Actualización por Wi-Fi y diagnóstico ─────────────────────────
+// ── Micrófono, actualización por Wi-Fi y diagnóstico ──────────────
 I2SClass micI2S;
 bool micOn = false;
 /** Arranca el códec y el I2S la primera vez que se usa el micrófono. */
@@ -1326,6 +1364,412 @@ bool micReady() {
   if (!micI2S.begin(I2S_MODE_STD, MIC_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO, I2S_STD_SLOT_LEFT)) return false;
   micOn = true;
   return true;
+}
+
+// ── Vista del agente ──────────────────────────────────────────────
+/** Escribe `text` partido en líneas de `maxW` px (hasta `maxLines`, la última con "..."). Devuelve la y siguiente. */
+int drawWrapped(const String &text, int x, int y, int maxW, int lineH, int maxLines) {
+  String line;
+  int lines = 0;
+  int i = 0, n = text.length();
+  while (i < n && lines < maxLines) {
+    while (i < n && text[i] == ' ') i++;
+    int j = i;
+    while (j < n && text[j] != ' ') j++;
+    if (j == i) break;
+    String word = text.substring(i, j);
+    String next = line.length() ? line + " " + word : word;
+    if (line.length() && textWidth(next) > maxW) {
+      if (lines == maxLines - 1) {
+        // Última línea y queda texto: se corta con puntos suspensivos.
+        line = fitText(line + " " + text.substring(i), maxW);
+        i = n;
+        break;
+      }
+      gfx->setCursor(x, y + lines * lineH);
+      gfx->print(line);
+      lines++;
+      line = word;
+    } else {
+      line = next;
+    }
+    i = j;
+  }
+  if (line.length() && lines < maxLines) {
+    gfx->setCursor(x, y + lines * lineH);
+    gfx->print(fitText(line, maxW));
+    lines++;
+  }
+  return y + lines * lineH;
+}
+
+void detailButton(int x, int w, const String &label, uint16_t bg, uint16_t fg, bool pressed) {
+  int y = H - DETAIL_BAR_H + 4;
+  gfx->fillRoundRect(x, y, w, DETAIL_BAR_H - 12, 10, pressed ? C_TEXT : bg);
+  gfx->setFont(F_NAME);
+  gfx->setTextColor(pressed ? C_BG : fg);
+  printCentered(label, x + w / 2, y + (DETAIL_BAR_H - 12) / 2 + 5);
+}
+
+void openDetail(int id) {
+  detailId = id;
+  dv = DV_VIEW;
+  briefState = BR_LOADING;
+  briefNeed = "";
+  briefSummary = "";
+  briefNextTry = 0;
+  briefSince = millis();
+  detailStatus = 0;
+  heardText = "";
+  detailNote = "";
+  detailPress = 0;
+  detailQuietUntil = millis() + DETAIL_QUIET_MS;
+}
+
+void closeDetail() {
+  detailId = -1;
+  dv = DV_VIEW;
+  detailPress = 0;
+}
+
+void detailError(const String &text) {
+  detailNote = text;
+  detailNoteUntil = millis() + 5000;
+}
+
+void drawDetail() {
+  Agent *a = agentById(detailId);
+  if (!a) {
+    closeDetail();
+    return;
+  }
+  gfx->fillScreen(C_BG);
+  // Cabecera: volver, nombre con su estado y cuánto lleva.
+  gfx->fillRoundRect(6, 4, 96, 26, 13, detailPress == 1 ? C_TEXT : C_CARD_HI);
+  uint16_t backFg = detailPress == 1 ? C_BG : C_TEXT;
+  for (int t = 0; t <= 1; t++) {
+    gfx->drawLine(24 + t, 11, 18 + t, 17, backFg);
+    gfx->drawLine(18 + t, 17, 24 + t, 23, backFg);
+  }
+  gfx->setFont(F_NAME);
+  gfx->setTextColor(backFg);
+  gfx->setCursor(34, 22);
+  gfx->print(T("Volver", "Back"));
+  uint16_t sc = statusColor(a->status);
+  gfx->setFont(F_SMALL);
+  String st = statusLabel(a->status);
+  String el = elapsed(a->since);
+  if (el.length()) st += " · " + el;
+  int stW = textWidth(st);
+  gfx->setTextColor(sc);
+  gfx->setCursor(W - 10 - stW, 21);
+  gfx->print(st);
+  gfx->fillCircle(116, 17, 4, sc);
+  gfx->setFont(F_TITLE);
+  gfx->setTextColor(C_TEXT);
+  gfx->setCursor(127, 23);
+  gfx->print(fitText(a->name, W - 127 - stW - 24));
+  gfx->drawFastHLine(0, 34, W, C_CARD_HI);
+
+  // Columna izquierda: su personaje. Derecha: el texto.
+  drawAvatar(*a, 52, 124, 2);
+  const int tx = 108, tw = W - tx - 12;
+  int y = 56;
+  if (dv == DV_REC) {
+    // Grabando: punto que late, tiempo y nivel del micrófono.
+    gfx->fillCircle(tx + 10, 70, 8 + ((millis() / 300) % 2) * 2, C_ERR);
+    gfx->setFont(F_BIG);
+    gfx->setTextColor(C_TEXT);
+    gfx->setCursor(tx + 30, 78);
+    gfx->print(T("Te escucho...", "Listening..."));
+    gfx->setFont(F_NAME);
+    gfx->setTextColor(C_MUTED);
+    gfx->setCursor(tx, 112);
+    gfx->print(T("Suelta para terminar.", "Release to finish."));
+    gfx->drawRoundRect(tx, 132, tw, 14, 7, C_CARD_HI);
+    gfx->fillRoundRect(tx + 2, 134, max(4, (tw - 4) * recLevel / 100), 10, 5, C_WORK);
+  } else if (dv == DV_TRANSCRIBING || dv == DV_SENDING) {
+    gfx->setFont(F_BIG);
+    gfx->setTextColor(C_TEXT);
+    gfx->setCursor(tx, 86);
+    gfx->print(dv == DV_SENDING ? T("Enviando...", "Sending...") : T("Transcribiendo...", "Transcribing..."));
+    if (dv == DV_SENDING) {
+      gfx->setFont(F_BODY);
+      gfx->setTextColor(C_MUTED);
+      drawWrapped(heardText, tx, 116, tw, 16, 5);
+    }
+  } else if (dv == DV_CONFIRM) {
+    gfx->setFont(F_SMALL);
+    gfx->setTextColor(C_WORK);
+    gfx->setCursor(tx, y);
+    gfx->print(T("ESTO ENTENDÍ. ¿LO ENVÍO?", "THIS IS WHAT I HEARD. SEND IT?"));
+    gfx->setFont(F_NAME);
+    gfx->setTextColor(C_TEXT);
+    drawWrapped(heardText, tx, y + 22, tw, 18, 9);
+  } else if (a->status == 'w') {
+    gfx->setFont(F_NAME);
+    gfx->setTextColor(C_WORK);
+    gfx->setCursor(tx, y + 8);
+    gfx->print(T("Sigue trabajando.", "Still working."));
+    gfx->setFont(F_BODY);
+    gfx->setTextColor(C_MUTED);
+    drawWrapped(T("Cuando termine verás aquí el resumen. Si le hablas ahora, lo recibe al acabar el turno.", "The summary shows up here when it finishes. If you talk to it now, it gets your message when the turn ends."), tx, y + 32, tw, 16, 4);
+  } else if (briefState == BR_READY) {
+    gfx->setFont(F_SMALL);
+    gfx->setTextColor(C_NEED);
+    gfx->setCursor(tx, y);
+    gfx->print(T("NECESITA DE TI", "NEEDS FROM YOU"));
+    gfx->setFont(F_NAME);
+    gfx->setTextColor(C_TEXT);
+    y = drawWrapped(briefNeed, tx, y + 19, tw, 17, 3);
+    gfx->setFont(F_SMALL);
+    gfx->setTextColor(C_MUTED);
+    gfx->setCursor(tx, y + 6);
+    gfx->print(T("RESUMEN", "SUMMARY"));
+    gfx->setFont(F_BODY);
+    gfx->setTextColor(C_TEXT);
+    int room = (H - DETAIL_BAR_H - 20 - (y + 24)) / 16 + 1;
+    drawWrapped(briefSummary, tx, y + 24, tw, 16, max(1, room));
+  } else {
+    gfx->setFont(F_NAME);
+    gfx->setTextColor(C_MUTED);
+    gfx->setCursor(tx, y + 8);
+    gfx->print(briefState == BR_LOADING ? T("Resumiendo su última respuesta...", "Summarizing its latest reply...") : T("No hay una respuesta que resumir.", "There is no reply to summarize."));
+  }
+
+  // Aviso (un fallo) justo encima de los botones.
+  if (detailNote.length() && millis() < detailNoteUntil) {
+    gfx->setFont(F_SMALL);
+    gfx->setTextColor(C_ERR);
+    printCentered(fitText(detailNote, W - 24), W / 2, H - DETAIL_BAR_H - 4);
+  }
+
+  // Botones.
+  const int bw = (W - 24) / 2;
+  if (dv == DV_CONFIRM) {
+    detailButton(8, bw, T("Cancelar", "Cancel"), C_CARD_HI, C_TEXT, detailPress == 4);
+    detailButton(16 + bw, bw, T("Enviar", "Send"), C_WORK, C_BG, detailPress == 5);
+  } else if (dv == DV_VIEW || dv == DV_REC) {
+    detailButton(8, bw, T("Abrir en el computador", "Open on the computer"), C_CARD_HI, C_TEXT, detailPress == 2);
+    detailButton(16 + bw, bw, dv == DV_REC ? T("Grabando...", "Recording...") : T("Mantén para hablar", "Hold to talk"), C_WORK, C_BG, detailPress == 3 || dv == DV_REC);
+  }
+  gfx->flush();
+}
+
+/** Pide el resumen de la última respuesta del agente abierto (el servidor lo genera y hay que insistir). */
+bool fetchBrief() {
+  Agent *a = agentById(detailId);
+  if (!a || dv != DV_VIEW) return false;
+  if (a->status != detailStatus) {
+    // Cambió de estado (terminó un turno o empezó otro): el resumen ya no vale.
+    detailStatus = a->status;
+    briefState = BR_LOADING;
+    briefSince = millis();
+    briefNextTry = 0;
+    return true;
+  }
+  if (a->status == 'w' || briefState != BR_LOADING || millis() < briefNextTry) return false;
+  if (millis() - briefSince > BRIEF_WAIT_MS) {
+    briefState = BR_NONE;
+    return true;
+  }
+  briefNextTry = millis() + BRIEF_POLL_MS;
+  if (WiFi.status() != WL_CONNECTED || !resolveHost()) return false;
+  HTTPClient http;
+  http.setConnectTimeout(2000);
+  http.setTimeout(4000);
+  http.begin(baseUrl() + "/device/brief?id=" + String(a->id));
+  http.addHeader("X-Cubicle-Key", cfgKey);
+  int code = http.GET();
+  String body = code == 200 ? http.getString() : String("");
+  http.end();
+  if (code != 200) {
+    if (code == 403 || code == 404) briefState = BR_NONE;
+    return code == 403 || code == 404;
+  }
+  JsonDocument doc;
+  if (deserializeJson(doc, body)) return false;
+  const char *state = doc["state"] | "pending";
+  if (strcmp(state, "ready") == 0) {
+    briefNeed = (const char *)(doc["need"] | "");
+    briefSummary = (const char *)(doc["summary"] | "");
+    briefState = BR_READY;
+    return true;
+  }
+  if (strcmp(state, "none") == 0) {
+    briefState = BR_NONE;
+    return true;
+  }
+  return false;
+}
+
+/** Graba mientras el dedo siga en la pantalla (hasta REC_MAX_S). Devuelve los bytes de audio (sin cabecera). */
+size_t recordWhileHeld() {
+  const size_t cap = (size_t)MIC_RATE * 2 * REC_MAX_S;
+  if (!recBuf) recBuf = (uint8_t *)ps_malloc(44 + cap);
+  if (!recBuf || !micReady()) return 0;
+  // Lo que hubiera acumulado el micrófono antes de pulsar no cuenta.
+  static char junk[1024];
+  uint32_t t0 = millis();
+  while (micI2S.available() > 0 && millis() - t0 < 150) micI2S.readBytes(junk, sizeof(junk));
+  size_t len = 0;
+  uint32_t lastContact = millis(), lastDraw = 0;
+  recLevel = 0;
+  while (len < cap) {
+    size_t n = micI2S.readBytes((char *)recBuf + 44 + len, min(cap - len, (size_t)3200));  // ~100 ms
+    if (n == 0) break;
+    int16_t *smp = (int16_t *)(recBuf + 44 + len);
+    int peak = 0;
+    for (size_t k = 0; k < n / 2; k++) peak = max(peak, abs((int)smp[k]));
+    recLevel = min(100, peak * 100 / 12000);
+    len += n;
+    int tx, ty;
+    if (readTouch(tx, ty)) lastContact = millis();
+    else if (millis() - lastContact > REC_RELEASE_MS) break;
+    if (millis() - lastDraw > 200) {
+      lastDraw = millis();
+      drawDetail();
+    }
+  }
+  return len;
+}
+
+void wavHeader(uint8_t *h, uint32_t dataLen) {
+  auto u32 = [&](int o, uint32_t v) { memcpy(h + o, &v, 4); };
+  auto u16 = [&](int o, uint16_t v) { memcpy(h + o, &v, 2); };
+  memcpy(h, "RIFF", 4);
+  u32(4, 36 + dataLen);
+  memcpy(h + 8, "WAVEfmt ", 8);
+  u32(16, 16);
+  u16(20, 1);  // PCM
+  u16(22, 1);  // mono
+  u32(24, MIC_RATE);
+  u32(28, MIC_RATE * 2);
+  u16(32, 2);
+  u16(34, 16);
+  memcpy(h + 36, "data", 4);
+  u32(40, dataLen);
+}
+
+/** Dictado: graba mientras se mantiene pulsado, lo manda a transcribir y pasa a confirmar. */
+void talk() {
+  dv = DV_REC;
+  detailNote = "";
+  drawDetail();
+  uint32_t start = millis();
+  size_t len = recordWhileHeld();
+  if (len == 0) {
+    dv = DV_VIEW;
+    detailError(T("No pude usar el micrófono.", "Could not use the microphone."));
+    return;
+  }
+  if (millis() - start < REC_MIN_MS) {
+    dv = DV_VIEW;
+    detailError(T("Mantén pulsado mientras hablas.", "Keep holding while you talk."));
+    return;
+  }
+  dv = DV_TRANSCRIBING;
+  drawDetail();
+  wavHeader(recBuf, len);
+  HTTPClient http;
+  http.setConnectTimeout(3000);
+  http.setTimeout(45000);
+  http.begin(baseUrl() + "/device/voice");
+  http.addHeader("X-Cubicle-Key", cfgKey);
+  http.addHeader("Content-Type", "audio/wav");
+  int code = http.POST(recBuf, 44 + len);
+  String body = code == 200 ? http.getString() : String("");
+  http.end();
+  dv = DV_VIEW;
+  JsonDocument doc;
+  if (code != 200 || deserializeJson(doc, body)) {
+    detailError(String(T("No pude transcribir (", "Could not transcribe (")) + String(code) + ")");
+    return;
+  }
+  heardText = (const char *)(doc["text"] | "");
+  heardText.trim();
+  if (!heardText.length()) {
+    detailError(T("No te oí. Acércate y prueba otra vez.", "I did not hear you. Get closer and try again."));
+    return;
+  }
+  dv = DV_CONFIRM;
+}
+
+/** Manda lo dictado a la conversación del agente. */
+void sendHeard() {
+  Agent *a = agentById(detailId);
+  if (!a) return;
+  dv = DV_SENDING;
+  drawDetail();
+  JsonDocument req;
+  req["id"] = a->id;
+  req["text"] = heardText;
+  String payload;
+  serializeJson(req, payload);
+  HTTPClient http;
+  http.setConnectTimeout(3000);
+  http.setTimeout(45000);
+  http.begin(baseUrl() + "/device/prompt");
+  http.addHeader("X-Cubicle-Key", cfgKey);
+  http.addHeader("Content-Type", "application/json");
+  int code = http.POST(payload);
+  String body = code > 0 ? http.getString() : String("");
+  http.end();
+  JsonDocument doc;
+  deserializeJson(doc, body);
+  if (code == 200 && (doc["ok"] | false)) {
+    toastText = (doc["queued"] | false) ? T("En cola: lo recibe al terminar el turno", "Queued: delivered when the turn ends") : String(T("Enviado a ", "Sent to ")) + a->name;
+    toastUntil = millis() + 3000;
+    lastPayload = "";  // refresca el estado cuanto antes
+    closeDetail();
+    return;
+  }
+  const char *why = doc["reason"] | "";
+  dv = DV_CONFIRM;
+  detailError(strcmp(why, "locked") == 0          ? T("El computador está bloqueado.", "The computer is locked.")
+              : strcmp(why, "no-permission") == 0 ? T("Falta el permiso de Accesibilidad en el Mac.", "The Mac is missing the Accessibility permission.")
+              : strcmp(why, "not-focused") == 0   ? T("La app de Claude no abrió la conversación.", "The Claude app did not open the conversation.")
+              : strcmp(why, "not-confirmed") == 0 ? T("Lo escribí, pero no pude confirmar que llegó.", "I typed it, but could not confirm it arrived.")
+              : strcmp(why, "busy") == 0          ? T("Hay otro envío en curso.", "Another message is being sent.")
+                                                  : String(T("No se pudo enviar (", "Could not send (")) + String(code) + ")");
+}
+
+/** Botón de la vista del agente bajo (x, y), o 0. */
+int detailHit(int x, int y) {
+  if (y < 40 && x < 130) return 1;
+  if (y < H - DETAIL_BAR_H - 6) return 0;
+  bool left = x < W / 2;
+  if (dv == DV_CONFIRM) return left ? 4 : 5;
+  if (dv == DV_VIEW) return left ? 2 : 3;
+  return 0;
+}
+
+/** Dedo abajo en la vista del agente. Hablar empieza al pulsar; lo demás, al soltar. */
+void detailTouchDown(int x, int y) {
+  if (millis() < detailQuietUntil) return;
+  detailPress = detailHit(x, y);
+  if (detailPress == 3) {
+    talk();
+    detailPress = 0;
+    detailQuietUntil = millis() + DETAIL_QUIET_MS;
+  }
+}
+
+void detailTouchUp() {
+  int b = detailPress;
+  detailPress = 0;
+  Agent *a = agentById(detailId);
+  if (b == 1 || !a) {
+    closeDetail();
+  } else if (b == 2) {
+    openAgent(*a);
+    closeDetail();
+  } else if (b == 4) {
+    dv = DV_VIEW;
+    heardText = "";
+  } else if (b == 5) {
+    sendHeard();
+  }
 }
 
 /** OTA (contraseña = la clave de Cubicle; `./flash.sh ota`), GET /info, /rotate y /shot. */
@@ -1386,7 +1830,7 @@ void startNetServices() {
     web.send(200, "application/octet-stream", "");
     for (size_t o = 0; o < len; o += 4096) web.sendContent((const char *)fb + o, min((size_t)4096, len - o));
   });
-  // Vista previa para revisar la pantalla sin esperar: v=rest | alert | evo | toggle. Pide la clave.
+  // Vista previa para revisar la pantalla sin esperar: v=rest | alert | evo | toggle | detail | back. Pide la clave.
   web.on("/preview", []() {
     if (web.header("X-Cubicle-Key") != cfgKey) {
       web.send(401, "text/plain", "unauthorized");
@@ -1408,6 +1852,18 @@ void startNetServices() {
       evoPromptsNow = 350;
     } else if (v == "toggle") {
       userAll = !userAll;
+    } else if (v == "detail" && agentCount > 0) {
+      // Vista del agente (el primero de la diapositiva, o ?id=); ?s=confirm enseña la confirmación.
+      int id = web.hasArg("id") ? web.arg("id").toInt() : agents[viewCount > 0 ? view[pageFirst[page]] : 0].id;
+      if (agentById(id)) {
+        openDetail(id);
+        if (web.arg("s") == "confirm") {
+          heardText = T("Sí, haz el push y avísame cuando termine el despliegue.", "Yes, push it and tell me when the deploy is done.");
+          dv = DV_CONFIRM;
+        }
+      }
+    } else if (v == "back") {
+      closeDetail();
     }
     rebuildView();
     pendingRedraw = true;
@@ -1556,6 +2012,15 @@ void loop() {
     dirty = true;
   }
 
+  // Vista del agente: su resumen (el servidor tarda unos segundos) y vuelta sola a las fichas.
+  if (detailId >= 0) {
+    if (!touching && fetchBrief()) dirty = true;
+    if (millis() - lastTouchMs > DETAIL_IDLE_MS && dv != DV_CONFIRM) {
+      closeDetail();
+      dirty = true;
+    }
+  }
+
   // Paso a reposo tras 5 min sin agentes activos ni toques.
   static uint32_t lastModeCheck = 0;
   if (millis() - lastModeCheck > 1000) {
@@ -1593,6 +2058,7 @@ void loop() {
   // Franjas laterales (o deslizar): cambian de diapositiva. Sobre una ficha: la abre al soltar.
   static int downX = 0, downY = 0, lastX = 0;
   static bool consumed = false;
+  static uint32_t downMs = 0;
   int x, y;
   // El táctil pierde lecturas sueltas con el dedo quieto: sin este margen, cada hueco contaba
   // como soltar y volver a tocar (un dedo apoyado en una flecha pasaba varias diapositivas).
@@ -1612,6 +2078,7 @@ void loop() {
   if (down && !touching) {
     downX = x;
     downY = y;
+    downMs = millis();
     pressedIndex = -1;
     consumed = false;
     lastActivityMs = millis();
@@ -1627,6 +2094,10 @@ void loop() {
     } else if (dimmed) {
       rebuildView();  // solo despierta (sube la luz)
       consumed = true;
+    } else if (detailId >= 0) {
+      // Vista del agente: sus propios botones (hablar graba mientras dure la pulsación).
+      consumed = true;
+      detailTouchDown(x, y);
     } else if (mode == MODE_REST && restBg && y >= HEADER_H + 4) {
       // Reposo con fondo: un toque fuera de la cabecera pasa a la imagen siguiente.
       restSkip++;
@@ -1653,7 +2124,15 @@ void loop() {
       pressedIndex = -1;  // es un deslizamiento, no un toque
       dirty = true;
     }
+    // Ficha pulsada sin moverse: abre la vista del agente (resumen y responder por voz).
+    if (voiceEnabled && !consumed && pressedIndex >= 0 && pressedIndex < agentCount && millis() - downMs > LONG_PRESS_MS && abs(x - downX) < LONG_PRESS_SLOP && abs(y - downY) < LONG_PRESS_SLOP) {
+      openDetail(agents[pressedIndex].id);
+      pressedIndex = -1;
+      consumed = true;
+      dirty = true;
+    }
   } else if (touching) {
+    if (detailId >= 0 && detailPress) detailTouchUp();
     if (!consumed) {
       int dx = lastX - downX;
       bool leftZone = downX < SIDE_W && downY > HEADER_H;

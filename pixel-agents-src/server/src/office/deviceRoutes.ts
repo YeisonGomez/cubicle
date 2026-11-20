@@ -15,6 +15,12 @@
  *   POST /device/open  {"id": n} → la webview abre ese agente y el navegador pasa al frente
  *                                  (con las sesiones en la app de Claude: se abre allí, sessionHost.ts)
  *
+ * Responder desde la pantalla (solo con `"voice": true` en dispositivo.json y las sesiones en la
+ * app de Claude; apagado por defecto porque deja mandar prompts a los agentes desde la red local):
+ *   GET  /device/brief?id=n      → resumen ejecutivo de la última respuesta: { state, need?, summary? }
+ *   POST /device/voice           → cuerpo = WAV dictado; devuelve { text } (whisper, en local)
+ *   POST /device/prompt {"id": n, "text": "..."} → lo escribe en su conversación (appPrompt.ts)
+ *
  * "Te necesita" (terminó o pregunta y aún no lo has mirado) lo decide la webview: lo
  * sube con PUT /api/device/attention (servidor de la oficina, con token) y aquí se marca.
  */
@@ -30,11 +36,13 @@ import type { AgentStateStore } from '../agentStateStore.js';
 import { readConfig } from '../configPersistence.js';
 import type { HttpServerOptions } from '../httpServer.js';
 import { activityFile, officeDir } from '../officePaths.js';
+import { sendPromptToClaudeApp, transcriptOf } from './appPrompt.js';
+import { restBackground, restBgVersion } from './deviceRestBg.js';
 import { spriteFor } from './deviceSprites.js';
+import { BriefCache, transcribe, VOICE_MAX_BYTES, voiceConfig } from './deviceVoice.js';
 import { getOfficeLang } from './language.js';
 import { getSessionHost, openInClaudeApp, sessionIdFor } from './sessionHost.js';
 import { bearerAuth } from './shared.js';
-import { restBackground, restBgVersion } from './deviceRestBg.js';
 import type { AgentSkin } from './skinRoutes.js';
 import { markEvolved, resolveSkin } from './skinRoutes.js';
 import { accountUsage } from './statsRoutes.js';
@@ -48,6 +56,8 @@ interface DeviceConfig {
   enabled: boolean;
   key: string;
   port: number;
+  /** Responder a los agentes desde la pantalla (resumen, dictado y envío). Apagado por defecto. */
+  voice: boolean;
 }
 
 export type DeviceStatus = 'working' | 'permission' | 'question' | 'idle';
@@ -123,6 +133,7 @@ export function readDeviceConfig(): DeviceConfig | null {
     enabled: true,
     key: typeof raw.key === 'string' && raw.key.length >= 16 ? raw.key : crypto.randomBytes(16).toString('hex'),
     port: Number.isInteger(raw.port) ? (raw.port as number) : DEVICE_PORT_DEFAULT,
+    voice: raw.voice === true,
   };
   if (cfg.key !== raw.key || cfg.port !== raw.port) fs.writeFileSync(configFile(), JSON.stringify(cfg, null, 2));
   return cfg;
@@ -431,12 +442,28 @@ function raiseBrowser(officePort: number): void {
   });
 }
 
-function readBody(req: http.IncomingMessage): Promise<string> {
+/** Cuerpo binario (el WAV dictado), con tope de tamaño. null si se pasa. */
+function readBinary(req: http.IncomingMessage, max: number): Promise<Buffer | null> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let over = false;
+    req.on('data', (c: Buffer) => {
+      size += c.length;
+      if (size > max) over = true;
+      else chunks.push(c);
+    });
+    req.on('end', () => resolve(over ? null : Buffer.concat(chunks)));
+    req.on('error', () => resolve(null));
+  });
+}
+
+function readBody(req: http.IncomingMessage, max = 4096): Promise<string> {
   return new Promise((resolve) => {
     let body = '';
     req.on('data', (c: Buffer) => {
       body += c.toString();
-      if (body.length > 4096) req.destroy();
+      if (body.length > max) req.destroy();
     });
     req.on('end', () => resolve(body));
     req.on('error', () => resolve(''));
@@ -449,6 +476,17 @@ export function startDeviceServer(store: AgentStateStore, officePort: number, ar
   if (!cfg) return null;
   const tracker = new DeviceStatusTracker((id) => store.get(id)?.directoryName, path.join(officeDir(), 'pendientes.json'));
   store.on('broadcast', (m: Record<string, unknown>) => tracker.onMessage(m));
+  const briefs = new BriefCache();
+  // Responder desde la pantalla: activado, con las sesiones en la app de Claude y con whisper instalado.
+  const voiceOn = (): boolean => cfg.voice && getSessionHost() === 'claude-app' && process.platform === 'darwin' && voiceConfig() !== null;
+  /** Directorio, conversación y si está a mitad de un turno, para un id de la pantalla. */
+  const resolveAgent = (id: number): { name: string; sessionId: string | null; working: boolean } | null => {
+    if (!Number.isInteger(id)) return null;
+    const name = directoryForDeviceId(id) ?? store.get(id)?.directoryName;
+    if (!name) return null;
+    const live = [...store.values()].filter((a) => a.directoryName === name);
+    return { name, sessionId: sessionIdFor(store, name), working: live.some((a) => tracker.get(a.id) !== 'idle') };
+  };
   const send = (res: http.ServerResponse, code: number, data: unknown) => {
     res.writeHead(code, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(data));
@@ -457,7 +495,38 @@ export function startDeviceServer(store: AgentStateStore, officePort: number, ar
     void (async () => {
       if (!keyMatches(req.headers['x-cubicle-key'], cfg.key)) return send(res, 401, { error: 'unauthorized' });
       if (req.method === 'GET' && req.url === '/device/agents') {
-        return send(res, 200, { agents: listDeviceAgents(store, tracker, areaOf) });
+        // `voice`: la pantalla ofrece la vista del agente (resumen y responder) solo si se puede usar.
+        return send(res, 200, { agents: listDeviceAgents(store, tracker, areaOf), voice: voiceOn() });
+      }
+      if (req.url?.startsWith('/device/brief') || req.url === '/device/voice' || req.url === '/device/prompt') {
+        if (!voiceOn()) return send(res, 403, { error: 'voice disabled' });
+        if (req.method === 'GET' && req.url.startsWith('/device/brief?')) {
+          const target = resolveAgent(Number(new URL(req.url, 'http://x').searchParams.get('id')));
+          if (!target?.sessionId) return send(res, 404, { error: 'agent not found' });
+          const b = briefs.get(target.sessionId, transcriptOf(target.sessionId), getOfficeLang());
+          return send(res, 200, b.state === 'ready' ? { state: 'ready', ...b.brief } : { state: b.state });
+        }
+        if (req.method === 'POST' && req.url === '/device/voice') {
+          const wav = await readBinary(req, VOICE_MAX_BYTES);
+          const text = wav ? await transcribe(wav, getOfficeLang()) : null;
+          if (text === null) return send(res, wav ? 500 : 413, { error: wav ? 'transcription failed' : 'too large' });
+          return send(res, 200, { text });
+        }
+        if (req.method === 'POST' && req.url === '/device/prompt') {
+          let body: { id?: unknown; text?: unknown } = {};
+          try {
+            body = JSON.parse(await readBody(req, 16_384)) as typeof body;
+          } catch {
+            /* cuerpo no válido */
+          }
+          const target = typeof body.id === 'number' ? resolveAgent(body.id) : null;
+          if (!target?.sessionId) return send(res, 404, { error: 'agent not found' });
+          const result = await sendPromptToClaudeApp(target.sessionId, body.text, target.working);
+          console.log(`[Cubicle] Pantalla: prompt dictado a ${target.name}: ${result.ok ? (result.queued ? 'en cola' : 'enviado') : `no enviado (${result.reason})`}`);
+          if (result.ok) tracker.attendedName(target.name);
+          return send(res, result.ok ? 200 : 409, result);
+        }
+        return send(res, 404, { error: 'not found' });
       }
       const sprite = req.method === 'GET' ? /^\/device\/sprite\/(\d+)$/.exec(req.url ?? '') : null;
       if (sprite) {

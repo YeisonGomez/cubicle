@@ -58,7 +58,7 @@ La vista de reposo puede llevar una imagen de fondo. El servidor la compone a 48
 - Franjas con flecha a los lados (o deslizar) → diapositiva siguiente o anterior. Hasta 8 agentes por diapositiva, agrupados por sala (de la más usada a la menos en los últimos 30 días); una sala no se parte entre diapositivas si cabe en una.
 - Gira sola si está claramente de pie (acelerómetro QMI8658: horizontal al derecho o al revés). Tumbada, usa el giro elegido a mano: toque corto en BOOT o `http://cubicle-pantalla.local/rotate` (se guarda).
 - BOOT 3 s → olvida el Wi-Fi y vuelve a abrir el portal.
-- `./flash.sh ota` → actualizar el programa por Wi-Fi (sin cable de datos; contraseña = la clave de Cubicle). `http://cubicle-pantalla.local/info` → estado y acelerómetro. Con la cabecera `X-Cubicle-Key`: `/shot` (captura de la pantalla en RGB565 crudo) y `/preview?v=rest|alert|evo|toggle` (enseña una vista o el parpadeo de aviso para revisarlos).
+- `./flash.sh ota` → actualizar el programa por Wi-Fi (sin cable de datos; contraseña = la clave de Cubicle). `http://cubicle-pantalla.local/info` → estado y acelerómetro. Con la cabecera `X-Cubicle-Key`: `/shot` (captura de la pantalla en RGB565 crudo) y `/preview?v=rest|alert|evo|toggle|detail|back` (enseña una vista o el parpadeo de aviso para revisarlos).
 - `./flash.sh config` → solo vuelve a guardar servidor y clave (p. ej. si cambias de clave).
 - Por el puerto serie: `INFO` (estado), `WIFI_RESET`, `CFG {"host":"…","ip":"…","port":3101,"key":"…"}`.
 
@@ -70,6 +70,21 @@ Controlador AXS15231B (pantalla por QSPI 320x480 y táctil por I2C 0x3B, SDA 8 /
 
 - **Solo redes de 2,4 GHz:** la ESP32 no ve las redes de 5 GHz (a menudo las que llevan "Plus" o "5G"). Si son del mismo router, el Mac en la de 5 GHz y la pantalla en la de 2,4 GHz se ven igual.
 - **"No encuentro <tu-mac>.local":** algunos routers no dejan pasar mDNS. La pantalla usa entonces la IP guardada; si la IP del Mac cambia, `./flash.sh config` la actualiza (o reserva la IP del Mac en el router).
+
+## Responder a un agente desde la pantalla (voz)
+
+Para contestar sin volver al computador. **Apagado por defecto**: actívalo con `"voice": true` en `~/.pixel-agents/oficina/dispositivo.json` y reinicia Cubicle. Solo funciona en macOS y con las sesiones en la app de Claude (Ajustes → "Sesiones en").
+
+1. **Deja pulsada una ficha** (0,6 s): se abre la vista del agente, con el botón **Volver**.
+2. Al abrirla ves un **resumen ejecutivo** de su última respuesta: qué necesita de ti y la conclusión, recortados a lo que cabe. Lo hace Claude Haiku en el computador (unos 5 s).
+3. **Mantén para hablar**: mientras tengas el dedo, graba (hasta 20 s). Al soltar, el computador lo pasa a texto con whisper, en local.
+4. La pantalla enseña lo que entendió. **Enviar** lo escribe en la conversación del agente; **Cancelar** lo descarta. "Abrir en el computador" hace lo mismo que un toque corto en la ficha.
+
+Requisitos en el computador: `whisper-cli` (`brew install whisper-cpp`) y un modelo en `~/.cache/cubicle-whisper/` (p. ej. `ggml-small.bin`), o `OFICINA_WHISPER_BIN` / `OFICINA_WHISPER_MODEL`; `ffmpeg` es opcional (limpia el zumbido del micrófono). El envío teclea en la app de Claude, así que macOS pide el permiso de **Accesibilidad** para el proceso de Cubicle, y la sesión del computador debe estar desbloqueada. Si el agente está a mitad de un turno, el mensaje queda en cola en la app y lo recibe al terminar.
+
+Ten en cuenta lo que abre: con esta opción, quien tenga la clave de la pantalla y esté en tu red local puede mandar prompts a tus agentes. Úsala solo en una red de confianza.
+
+Revisar la vista sin tocar la placa: `/preview?v=detail` (`&id=` para un agente, `&s=confirm` para la confirmación) y `/preview?v=back`.
 
 ## Micrófono (prueba)
 
