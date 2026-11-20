@@ -1,10 +1,10 @@
 # Cubicle Screen — Waveshare ESP32-S3-Touch-LCD-3.5B
 
-Tus agentes de Cubicle en una pantalla táctil por Wi-Fi, en una cuadrícula de 4x2 por diapositiva: el Pokémon animado, el nombre, el color de su sala y el estado (Trabajando, Te necesita, Libre). Al tocar uno, Cubicle lo abre en el computador (panel del agente, su terminal y el navegador al frente en macOS).
+Tus agentes de Cubicle en una pantalla táctil por Wi-Fi, en una cuadrícula de 4x2 por diapositiva: el Pokémon animado, el nombre, el color de su sala y el estado (Trabajando, Te necesita, Libre). Al tocar uno, Cubicle lo abre en el computador (panel del agente, su terminal y el navegador al frente en macOS). Opcional: [responder a un agente por voz](#responder-a-un-agente-desde-la-pantalla-voz) desde la propia pantalla.
 
 ## Cómo funciona
 
-- Cubicle abre un servidor HTTP **aparte** en la red local (puerto 3101), solo con dos rutas y una clave propia (`X-Cubicle-Key`). El servidor de la oficina, que lleva la terminal, sigue escuchando solo en `127.0.0.1`. Está apagado hasta que `~/.pixel-agents/oficina/dispositivo.json` tenga `"enabled": true` (lo crea `flash.sh`).
+- Cubicle abre un servidor HTTP **aparte** en la red local (puerto 3101), con unas pocas rutas y una clave propia (`X-Cubicle-Key`). El servidor de la oficina, que lleva la terminal, sigue escuchando solo en `127.0.0.1`. Está apagado hasta que `~/.pixel-agents/oficina/dispositivo.json` tenga `"enabled": true` (lo crea `flash.sh`).
   - `GET /device/agents` → `{ agents: [{ id, name, room, color, status: working|permission|idle, pokemon? }] }`
   - `GET /device/sprite/:id` → el GIF del Pokémon ya compuesto en RGB565 (solo en memoria).
   - `GET /device/summary` → hora, idioma, prompts de hoy y consumo de la semana y de Fable.
@@ -66,6 +66,8 @@ La vista de reposo puede llevar una imagen de fondo. El servidor la compone a 48
 
 Controlador AXS15231B (pantalla por QSPI 320x480 y táctil por I2C 0x3B, SDA 8 / SCL 7). Reset de la pantalla por el expansor TCA9554 (0x20, pin 1); luz de fondo en GPIO 6. ESP32-S3R8: 16 MB de flash, 8 MB de PSRAM octal.
 
+**Batería (opcional):** la placa trae cargador (AXP2101) y un conector **MX1.25 de 2 pines** para una batería de litio de **3,7 V y una celda** (LiPo 1S) con circuito de protección. Entre 1000 y 2000 mAh va bien por tamaño. Antes de enchufarla comprueba la **polaridad** contra las marcas `+` y `-` de la placa: el orden de los cables no es estándar entre fabricantes y al revés puede dañarla. Se carga sola por el USB.
+
 ## Problemas
 
 - **Solo redes de 2,4 GHz:** la ESP32 no ve las redes de 5 GHz (a menudo las que llevan "Plus" o "5G"). Si son del mismo router, el Mac en la de 5 GHz y la pantalla en la de 2,4 GHz se ven igual.
@@ -73,16 +75,69 @@ Controlador AXS15231B (pantalla por QSPI 320x480 y táctil por I2C 0x3B, SDA 8 /
 
 ## Responder a un agente desde la pantalla (voz)
 
-Para contestar sin volver al computador. **Apagado por defecto**: actívalo con `"voice": true` en `~/.pixel-agents/oficina/dispositivo.json` y reinicia Cubicle. Solo funciona en macOS y con las sesiones en la app de Claude (Ajustes → "Sesiones en").
+Para contestar a un agente sin volver al computador: dejas pulsada su ficha, lees un resumen de lo que necesita, le dictas la respuesta y la pantalla la envía a su conversación.
 
-1. **Deja pulsada una ficha** (0,6 s): se abre la vista del agente, con el botón **Volver**.
-2. Al abrirla ves un **resumen ejecutivo** de su última respuesta: qué necesita de ti y la conclusión, recortados a lo que cabe. Lo hace Claude Haiku en el computador (unos 5 s).
-3. **Mantén para hablar**: mientras tengas el dedo, graba (hasta 20 s). Al soltar, el computador lo pasa a texto con whisper, en local.
-4. La pantalla enseña lo que entendió. **Enviar** lo escribe en la conversación del agente; **Cancelar** lo descarta. "Abrir en el computador" hace lo mismo que un toque corto en la ficha.
+**Apagado por defecto.** Solo funciona en **macOS** y con las sesiones en la **app de Claude** (Ajustes → "Sesiones en" → App de Claude).
 
-Requisitos en el computador: `whisper-cli` (`brew install whisper-cpp`) y un modelo en `~/.cache/cubicle-whisper/` (p. ej. `ggml-small.bin`), o `OFICINA_WHISPER_BIN` / `OFICINA_WHISPER_MODEL`; `ffmpeg` es opcional (limpia el zumbido del micrófono). El idioma del dictado se detecta solo y el resumen sale en el de la interfaz; para tener ambos en tu idioma aunque la interfaz esté en otro, fíjalo con `"voiceLang": "es"` (código de dos letras) en `dispositivo.json`. El envío teclea en la app de Claude, así que macOS pide el permiso de **Accesibilidad** para el proceso de Cubicle, y la sesión del computador debe estar desbloqueada. Si el agente está a mitad de un turno, el mensaje queda en cola en la app y lo recibe al terminar.
+### Activarlo
 
-Ten en cuenta lo que abre: con esta opción, quien tenga la clave de la pantalla y esté en tu red local puede mandar prompts a tus agentes. Úsala solo en una red de confianza.
+1. Instala la transcripción local y descarga un modelo (unos 465 MB):
+   ```bash
+   brew install whisper-cpp ffmpeg
+   mkdir -p ~/.cache/cubicle-whisper
+   curl -L -o ~/.cache/cubicle-whisper/ggml-small.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
+   ```
+   `ffmpeg` es opcional: limpia el zumbido del micrófono de la placa y mejora lo que entiende.
+2. Comprueba que `claude` funciona en tu terminal y que tiene la sesión iniciada (`claude auth login`). El resumen se pide con él.
+3. En `~/.pixel-agents/oficina/dispositivo.json` añade `"voice": true` y, si dictas en un idioma distinto al de la interfaz, tu idioma:
+   ```json
+   { "enabled": true, "port": 3101, "key": "…", "voice": true, "voiceLang": "es" }
+   ```
+4. `cubicle restart`.
+5. Carga el programa actual en la placa si la tenías de antes: `./flash.sh` (USB) o `./flash.sh ota` (Wi-Fi).
+6. En el primer envío macOS pide el permiso de **Accesibilidad** para Cubicle (puede aparecer como `node`): Ajustes del Sistema → Privacidad y seguridad → Accesibilidad. Apruébalo y pulsa Enviar otra vez.
+
+### Usarlo
+
+1. **Deja pulsada una ficha** un poco más de medio segundo: se abre la vista del agente. **Volver** regresa a las fichas; **Abrir en el computador** hace lo mismo que un toque corto.
+2. En unos 5 s aparece el **resumen** de su última respuesta: qué necesita de ti y la conclusión. Si el agente sigue trabajando, lo dice y el resumen llega cuando termine.
+3. **Mantén para hablar**: graba mientras tengas el dedo apoyado (hasta 20 s). Suelta al terminar.
+4. La pantalla muestra lo que entendió. **Enviar** lo escribe en la conversación; **Cancelar** lo descarta y puedes dictar de nuevo.
+5. Si el agente estaba a mitad de un turno, el mensaje queda en cola en la app y lo recibe al acabar ("En cola").
+
+### Qué pasa por dentro
+
+- **Resumen** (`GET /device/brief?id=`): Cubicle toma del transcript la última respuesta del agente y se la pasa a Claude Haiku con `claude -p`, sin herramientas y sin guardar sesión. Se genera una vez por respuesta.
+- **Dictado** (`POST /device/voice`): la placa manda un WAV de 16 kHz y `whisper-cli` lo pasa a texto en tu computador. El audio no sale de tu red.
+- **Envío** (`POST /device/prompt {id, text}`): la app de Claude no tiene una entrada para recibir mensajes de otros programas, así que Cubicle abre la conversación en la app, pega el texto y pulsa Enter, como harías tú. Antes de teclear comprueba que el computador no está bloqueado, que la app abrió esa conversación y que está al frente; después confirma que el mensaje llegó.
+
+Consecuencias de enviar así: el computador debe estar **encendido y desbloqueado**, la app de Claude pasa al frente y cambia a esa conversación, y si había un texto a medio escribir en ella se reemplaza por lo dictado.
+
+### Opciones
+
+| Dónde | Clave | Para qué |
+|---|---|---|
+| `dispositivo.json` | `"voice": true` | Activa la función. |
+| `dispositivo.json` | `"voiceLang": "es"` | Idioma del dictado y del resumen (dos letras). Sin ella el dictado se detecta solo y el resumen sale en el idioma de la interfaz. |
+| Variable de entorno | `OFICINA_WHISPER_BIN` | Ruta de `whisper-cli` si no está en Homebrew. |
+| Variable de entorno | `OFICINA_WHISPER_MODEL` | Ruta de otro modelo ggml. |
+
+### Seguridad
+
+Con esta opción, quien tenga la clave de la pantalla y esté en tu red local puede leer resúmenes de tus conversaciones y mandar prompts a tus agentes. La clave viaja sin cifrar por la red. Actívala solo en una red de confianza.
+
+### Si algo falla
+
+| Lo que ves | Causa y arreglo |
+|---|---|
+| Dejar pulsada una ficha no hace nada | La función no está activa: falta `"voice": true`, reiniciar Cubicle, pasar las sesiones a la app de Claude, o instalar whisper y su modelo. |
+| "No hay una respuesta que resumir" | El agente aún no ha respondido en su último turno, o `claude` no pudo hacer el resumen (revisa `claude auth login`). |
+| Lo que entiende no tiene sentido | El idioma no coincide: fija `"voiceLang"` con el tuyo. |
+| "No te oí" | Habla a menos de medio metro y mantén el dedo apoyado mientras hablas. |
+| "Falta el permiso de Accesibilidad" | Apruébalo en Ajustes del Sistema (paso 6). |
+| "El computador está bloqueado" | Desbloquéalo; con la pantalla bloqueada no se puede teclear en la app. |
+| "La app de Claude no abrió la conversación" | La app está cerrada o tardó en responder. Ábrela y reintenta. |
+| Un agente aparece con un círculo en vez de su personaje | Su dibujo no se pudo descargar; la placa lo reintenta sola cada 30 s. |
 
 Revisar la vista sin tocar la placa: `/preview?v=detail` (`&id=` para un agente, `&s=confirm` para la confirmación) y `/preview?v=back`.
 

@@ -138,6 +138,12 @@ En Ajustes → Personajes. Con **Pokémon**, cada oficina es un tipo (fuego, agu
 
 Sprites del proyecto [vscode-pokemon](https://github.com/jakobhoeg/vscode-pokemon) (CC0), cargados en el navegador; no se guardan aquí. Pokémon es propiedad de The Pokémon Company, Nintendo y Game Freak; homenaje para uso personal, sin afiliación.
 
+## Pantalla externa (opcional)
+
+Una pantalla táctil con una ESP32 (Waveshare ESP32-S3-Touch-LCD-3.5B) que muestra tus agentes por Wi-Fi: quién trabaja, quién te necesita y cuánto lleva esperando. Un toque abre el agente en el computador. Con las sesiones en la app de Claude también puedes **responderle por voz** desde la pantalla: lees un resumen de lo que necesita, dictas y lo envía.
+
+Instalación, uso y solución de problemas: [`pixel-agents-src/devices/waveshare-esp32s3-lcd35b/README.md`](pixel-agents-src/devices/waveshare-esp32s3-lcd35b/README.md).
+
 ## Desarrollo
 
 - Solo webview: `cd pixel-agents-src/webview-ui && npx tsc -b && npx vite build` y recargar.
