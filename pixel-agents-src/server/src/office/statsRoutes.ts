@@ -32,6 +32,28 @@ function claudePlan(): { name: string | null; type: string | null; tier: string 
   }
 }
 
+type CachedLimit = { kind?: string; percent?: number; resets_at?: string; scope?: { model?: { display_name?: string } } | null };
+
+/** Límites del caché de uso de Claude Code (~/.claude.json). Solo estos campos, sin datos de la cuenta. */
+function cachedLimits(): { fetchedAt: number; limits: CachedLimit[] } | null {
+  try {
+    const d = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8')) as {
+      cachedUsageUtilization?: { fetchedAtMs?: number; utilization?: { limits?: CachedLimit[] } };
+    };
+    const c = d.cachedUsageUtilization;
+    return c?.fetchedAtMs && Array.isArray(c.utilization?.limits) ? { fetchedAt: c.fetchedAtMs, limits: c.utilization.limits } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Semana (todos los modelos) del caché: lo refresca `claude -p /usage` (usageRefresh.ts). */
+export function cachedWeekLimit(c = cachedLimits()): { percent: number; resetsAt: number; fetchedAt: number } | null {
+  const l = c?.limits.find((x) => x.kind === 'weekly_all');
+  if (!c || !l || typeof l.percent !== 'number' || !l.resets_at) return null;
+  return { percent: l.percent, resetsAt: Date.parse(l.resets_at), fetchedAt: c.fetchedAt };
+}
+
 /** Límite de Fable del caché de uso de Claude Code. Solo se leen estos campos, sin datos de la cuenta. */
 function cachedFableLimit(): { percent: number; resetsAt: number; fetchedAt: number } | null {
   try {
@@ -185,19 +207,41 @@ export function registerStatsRoutes(app: FastifyInstance, options: HttpServerOpt
   });
 }
 
-/** Uso de la cuenta (usage.json de la statusline) y lo que queda de Fable; null sin datos. */
+type UsageRaw = Record<string, unknown> & { seven_day?: { resets_at?: number; used_percentage?: number } | null };
+
+/**
+ * Semana a mostrar: la medida más reciente entre usage.json (statusline de una terminal) y el
+ * caché de Claude Code (lo refresca `claude -p /usage`; con las sesiones en la app es la única
+ * que se mueve). Si la semana ya reinició después de la medida, no vale. Puro para los tests.
+ */
+export function pickWeek(
+  file: { percent?: number; resetsAt?: number; at: number } | null,
+  cache: { percent: number; resetsAt: number; fetchedAt: number } | null,
+  now: number,
+): { percent: number | null; resetsAt: number | null; at: number } {
+  const fromFile = file ? { percent: file.percent ?? null, resetsAt: file.resetsAt ?? null, at: file.at } : null;
+  const fromCache = cache ? { percent: cache.percent, resetsAt: Math.floor(cache.resetsAt / 1000), at: Math.floor(cache.fetchedAt / 1000) } : null;
+  const best = fromCache && (!fromFile || fromCache.at > fromFile.at) ? fromCache : fromFile;
+  if (!best) return { percent: null, resetsAt: null, at: 0 };
+  const expired = typeof best.resetsAt === 'number' && best.resetsAt * 1000 < now;
+  return { percent: expired ? null : best.percent, resetsAt: best.resetsAt, at: best.at };
+}
+
+/** Uso de la cuenta (statusline o caché de Claude Code) y lo que queda de Fable; null sin datos. */
 export function accountUsage(): { raw: Record<string, unknown>; weekUsed: number | null; at: number; fable: ReturnType<typeof fableLeft> } | null {
+  let u: UsageRaw | null = null;
+  let fileAt = 0;
   try {
-    const u = JSON.parse(fs.readFileSync(usageFile(), 'utf8')) as Record<string, unknown> & { seven_day?: { resets_at?: number; used_percentage?: number } | null };
-    const fable = fableLeft({ ...fableLimitState(), resetsAt: u.seven_day?.resets_at, cached: cachedFableLimit() }, Date.now());
-    // usage.json lo escribe la statusline de Claude Code en terminal; con las sesiones en la app
-    // de Claude deja de actualizarse. Se entrega cuándo se midió y, si la semana ya reinició
-    // después de esa medida, el porcentaje deja de valer.
-    const at = Math.floor(fs.statSync(usageFile()).mtimeMs / 1000);
-    const reset = u.seven_day?.resets_at;
-    const expired = typeof reset === 'number' && reset * 1000 < Date.now();
-    return { raw: u, weekUsed: !expired && typeof u.seven_day?.used_percentage === 'number' ? u.seven_day.used_percentage : null, at, fable };
+    u = JSON.parse(fs.readFileSync(usageFile(), 'utf8')) as UsageRaw;
+    fileAt = Math.floor(fs.statSync(usageFile()).mtimeMs / 1000);
   } catch {
-    return null;
+    u = null;
   }
+  const cache = cachedLimits();
+  const week = pickWeek(u ? { percent: u.seven_day?.used_percentage, resetsAt: u.seven_day?.resets_at, at: fileAt } : null, cachedWeekLimit(cache), Date.now());
+  if (!u && week.at === 0) return null;
+  const fable = fableLeft({ ...fableLimitState(), resetsAt: week.resetsAt ?? undefined, cached: cachedFableLimit() }, Date.now());
+  // La barra de la web lee seven_day: se le da la medida elegida.
+  const raw: Record<string, unknown> = { ...(u ?? {}), seven_day: week.percent === null ? null : { used_percentage: week.percent, resets_at: week.resetsAt } };
+  return { raw, weekUsed: week.percent, at: week.at, fable };
 }

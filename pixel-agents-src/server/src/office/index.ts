@@ -18,6 +18,7 @@ import { registerRoomsRoutes } from './roomsRoutes.js';
 import { registerSessionHostRoutes } from './sessionHost.js';
 import { registerSkinRoutes } from './skinRoutes.js';
 import { registerStatsRoutes } from './statsRoutes.js';
+import { startUsageRefresh } from './usageRefresh.js';
 
 export { setListeningPort } from './shared.js';
 
@@ -25,6 +26,9 @@ export { setListeningPort } from './shared.js';
 export function startOfficeDevice(app: FastifyInstance, options: HttpServerOptions, officePort: number): void {
   if (options.embedded) return;
   const server = startDeviceServer(options.store, officePort, (name) => readConfig().standalone.areaMappings[name]?.[0]);
+  // Consumo de la semana y de Fable al día aunque no haya terminales con statusline.
+  const stopUsage = startUsageRefresh();
+  app.server.on('close', stopUsage);
   // Ya escuchando, Fastify no admite hooks nuevos: se cierra con el servidor HTTP de la oficina.
   if (server) app.server.on('close', () => server.close());
 }
