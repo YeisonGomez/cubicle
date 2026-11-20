@@ -58,7 +58,7 @@ interface DeviceConfig {
   port: number;
   /** Responder a los agentes desde la pantalla (resumen, dictado y envío). Apagado por defecto. */
   voice: boolean;
-  /** Idioma en que dictas (código de dos letras) o 'auto': no tiene por qué ser el de la interfaz. */
+  /** Idioma en que dictas y en que se escribe el resumen (código de dos letras) o 'auto': no tiene por qué ser el de la interfaz. */
   voiceLang: string;
 }
 
@@ -506,7 +506,8 @@ export function startDeviceServer(store: AgentStateStore, officePort: number, ar
         if (req.method === 'GET' && req.url.startsWith('/device/brief?')) {
           const target = resolveAgent(Number(new URL(req.url, 'http://x').searchParams.get('id')));
           if (!target?.sessionId) return send(res, 404, { error: 'agent not found' });
-          const b = briefs.get(target.sessionId, transcriptOf(target.sessionId), getOfficeLang());
+          // El resumen va en el idioma en que dictas (el del contenido), no en el de la interfaz.
+          const b = briefs.get(target.sessionId, transcriptOf(target.sessionId), cfg.voiceLang === 'auto' ? getOfficeLang() : cfg.voiceLang);
           return send(res, 200, b.state === 'ready' ? { state: 'ready', ...b.brief } : { state: b.state });
         }
         if (req.method === 'POST' && req.url === '/device/voice') {
