@@ -80,7 +80,7 @@ Para contestar sin volver al computador. **Apagado por defecto**: actívalo con 
 3. **Mantén para hablar**: mientras tengas el dedo, graba (hasta 20 s). Al soltar, el computador lo pasa a texto con whisper, en local.
 4. La pantalla enseña lo que entendió. **Enviar** lo escribe en la conversación del agente; **Cancelar** lo descarta. "Abrir en el computador" hace lo mismo que un toque corto en la ficha.
 
-Requisitos en el computador: `whisper-cli` (`brew install whisper-cpp`) y un modelo en `~/.cache/cubicle-whisper/` (p. ej. `ggml-small.bin`), o `OFICINA_WHISPER_BIN` / `OFICINA_WHISPER_MODEL`; `ffmpeg` es opcional (limpia el zumbido del micrófono). El envío teclea en la app de Claude, así que macOS pide el permiso de **Accesibilidad** para el proceso de Cubicle, y la sesión del computador debe estar desbloqueada. Si el agente está a mitad de un turno, el mensaje queda en cola en la app y lo recibe al terminar.
+Requisitos en el computador: `whisper-cli` (`brew install whisper-cpp`) y un modelo en `~/.cache/cubicle-whisper/` (p. ej. `ggml-small.bin`), o `OFICINA_WHISPER_BIN` / `OFICINA_WHISPER_MODEL`; `ffmpeg` es opcional (limpia el zumbido del micrófono). El idioma del dictado se detecta solo; si falla con frases cortas, fíjalo con `"voiceLang": "es"` (código de dos letras) en `dispositivo.json`. El envío teclea en la app de Claude, así que macOS pide el permiso de **Accesibilidad** para el proceso de Cubicle, y la sesión del computador debe estar desbloqueada. Si el agente está a mitad de un turno, el mensaje queda en cola en la app y lo recibe al terminar.
 
 Ten en cuenta lo que abre: con esta opción, quien tenga la clave de la pantalla y esté en tu red local puede mandar prompts a tus agentes. Úsala solo en una red de confianza.
 

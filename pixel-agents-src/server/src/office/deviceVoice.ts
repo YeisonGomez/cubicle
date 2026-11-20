@@ -228,7 +228,11 @@ export function cleanTranscript(raw: string): string {
     .trim();
 }
 
-/** Pasa a texto un WAV dictado en la pantalla. null = no se pudo; '' = no se oyó nada. */
+/**
+ * Pasa a texto un WAV dictado en la pantalla. null = no se pudo; '' = no se oyó nada.
+ * `lang`: código de dos letras o 'auto' (whisper lo detecta). Con el idioma equivocado whisper
+ * "traduce" lo que oye y sale un texto sin sentido, así que no se usa el de la interfaz.
+ */
 export async function transcribe(wav: Buffer, lang: string, cfg: VoiceConfig | null = voiceConfig()): Promise<string | null> {
   if (!cfg || wav.length < 44 || wav.length > VOICE_MAX_BYTES || wav.toString('ascii', 0, 4) !== 'RIFF') return null;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cubicle-voz-'));
@@ -243,7 +247,7 @@ export async function transcribe(wav: Buffer, lang: string, cfg: VoiceConfig | n
       const f = await exec(ffmpeg, ['-y', '-loglevel', 'error', '-i', raw, '-af', 'highpass=f=150,highpass=f=150,lowpass=f=6000,loudnorm=I=-18', '-ar', '16000', '-ac', '1', clean], 20_000);
       if (f.ok && fs.existsSync(clean)) input = clean;
     }
-    const r = await exec(cfg.bin, ['-m', cfg.model, '-l', lang === 'es' ? 'es' : 'en', '-nt', '-np', '-f', input], WHISPER_TIMEOUT_MS);
+    const r = await exec(cfg.bin, ['-m', cfg.model, '-l', /^[a-z]{2}$/.test(lang) ? lang : 'auto', '-nt', '-np', '-f', input], WHISPER_TIMEOUT_MS);
     return r.ok ? cleanTranscript(r.out) : null;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

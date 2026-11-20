@@ -58,6 +58,8 @@ interface DeviceConfig {
   port: number;
   /** Responder a los agentes desde la pantalla (resumen, dictado y envío). Apagado por defecto. */
   voice: boolean;
+  /** Idioma en que dictas (código de dos letras) o 'auto': no tiene por qué ser el de la interfaz. */
+  voiceLang: string;
 }
 
 export type DeviceStatus = 'working' | 'permission' | 'question' | 'idle';
@@ -134,6 +136,7 @@ export function readDeviceConfig(): DeviceConfig | null {
     key: typeof raw.key === 'string' && raw.key.length >= 16 ? raw.key : crypto.randomBytes(16).toString('hex'),
     port: Number.isInteger(raw.port) ? (raw.port as number) : DEVICE_PORT_DEFAULT,
     voice: raw.voice === true,
+    voiceLang: typeof raw.voiceLang === 'string' && /^[a-z]{2}$/.test(raw.voiceLang) ? raw.voiceLang : 'auto',
   };
   if (cfg.key !== raw.key || cfg.port !== raw.port) fs.writeFileSync(configFile(), JSON.stringify(cfg, null, 2));
   return cfg;
@@ -508,7 +511,7 @@ export function startDeviceServer(store: AgentStateStore, officePort: number, ar
         }
         if (req.method === 'POST' && req.url === '/device/voice') {
           const wav = await readBinary(req, VOICE_MAX_BYTES);
-          const text = wav ? await transcribe(wav, getOfficeLang()) : null;
+          const text = wav ? await transcribe(wav, cfg.voiceLang) : null;
           if (text === null) return send(res, wav ? 500 : 413, { error: wav ? 'transcription failed' : 'too large' });
           return send(res, 200, { text });
         }
