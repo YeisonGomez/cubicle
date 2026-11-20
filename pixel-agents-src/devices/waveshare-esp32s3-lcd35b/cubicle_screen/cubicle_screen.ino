@@ -139,9 +139,11 @@ struct Sprite {
   uint32_t total = 0;
   uint16_t *px = nullptr;  // n frames de w*h en PSRAM
   bool failed = false;
+  uint32_t failedAt = 0;  // cuándo falló la descarga: se reintenta pasado un rato
   bool hi = false;  // doble resolución ('CH', hasta 64 px): se dibuja a la mitad de escala
 };
 static const int MAX_SPRITES = 48;
+static const uint32_t SPRITE_RETRY_MS = 30000;
 Sprite sprites[MAX_SPRITES];
 
 // Evolución: se anima a pantalla completa cuando el servidor la anuncia y, al acabar, se confirma.
@@ -775,6 +777,13 @@ bool loadMissingSprite() {
   if (mode != MODE_REST)
     for (int i = pageFirst[page]; i < pageLast[page]; i++) order[k++] = agents[view[i]].sprite;
   for (int i = 0; i < agentCount; i++) order[k++] = agents[i].sprite;
+  // Un fallo no es para siempre: si Cubicle se estaba reiniciando justo al pedirlo, el agente
+  // se quedaba con el círculo de su inicial hasta reiniciar la placa.
+  for (auto &s : sprites)
+    if (s.failed && millis() - s.failedAt > SPRITE_RETRY_MS) {
+      s.failed = false;
+      s.id = -1;
+    }
   for (int j = 0; j < k; j++) {
     int id = order[j];
     if (id < 0 || findSprite(id)) continue;
@@ -795,12 +804,14 @@ bool loadMissingSprite() {
     int len = http.getSize();
     if (code != 200 || len < 5 || len > 200000) {
       slot->failed = true;
+      slot->failedAt = millis();
       http.end();
       return false;
     }
     uint8_t *buf = (uint8_t *)ps_malloc(len);
     if (!buf) {
       slot->failed = true;
+      slot->failedAt = millis();
       http.end();
       return false;
     }
@@ -816,6 +827,7 @@ bool loadMissingSprite() {
     if (got != len || buf[0] != 'C' || (buf[1] != 'S' && buf[1] != 'H')) {
       free(buf);
       slot->failed = true;
+      slot->failedAt = millis();
       return false;
     }
     slot->hi = buf[1] == 'H';
